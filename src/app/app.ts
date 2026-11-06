@@ -8,6 +8,7 @@ import { ProjectStoreService } from './services/project-store.service';
 
 @Component({
   selector: 'app-root',
+  host: { '(window:keydown)': 'onWindowKeydown($event)' },
   imports: [
     TaskGridComponent,
     GanttComponent,
@@ -44,6 +45,38 @@ export class App {
 
   onOutdent(): void {
     this.store.outdent();
+  }
+
+  onUndo(): void {
+    this.store.undo();
+  }
+
+  onRedo(): void {
+    this.store.redo();
+  }
+
+  onWindowKeydown(event: KeyboardEvent): void {
+    if (!event.ctrlKey || event.altKey) return;
+
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      (target.isContentEditable || target.matches('input, textarea, select'))
+    ) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === 'z' && event.shiftKey) {
+      event.preventDefault();
+      this.onRedo();
+    } else if (key === 'y') {
+      event.preventDefault();
+      this.onRedo();
+    } else if (key === 'z') {
+      event.preventDefault();
+      this.onUndo();
+    }
   }
 
   onOpenHolidays(): void {

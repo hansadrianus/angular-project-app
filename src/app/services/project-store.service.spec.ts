@@ -135,6 +135,138 @@ describe('ProjectStoreService', () => {
     ]);
   });
 
+  it('undoes and redoes a task name edit without losing its scheduled dates', () => {
+    const task = service.state().tasks.find((item) => item.uid === 3)!;
+    const originalFinish = d2s(service.scheduledTasks().find((item) => item.uid === 3)!.finish!);
+
+    service.updateTaskField(task.uid, 'name', 'Updated requirements');
+
+    expect(service.canUndo()).toBe(true);
+    service.undo();
+    expect(service.state().tasks.find((item) => item.uid === task.uid)?.name).toBe(task.name);
+    expect(d2s(service.scheduledTasks().find((item) => item.uid === task.uid)!.finish!)).toBe(
+      originalFinish
+    );
+
+    service.redo();
+    expect(service.state().tasks.find((item) => item.uid === task.uid)?.name).toBe(
+      'Updated requirements'
+    );
+    expect(service.canRedo()).toBe(false);
+  });
+
+  it('clears redo history when a new edit follows undo', () => {
+    service.updateTaskField(3, 'name', 'First edit');
+    service.undo();
+
+    service.updateTaskField(3, 'name', 'Different edit');
+
+    expect(service.canRedo()).toBe(false);
+    expect(service.state().tasks.find((item) => item.uid === 3)?.name).toBe('Different edit');
+  });
+
+  it('undoes and redoes a summary subtree reorder', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        createTask(1, 'Summary', 0, 0),
+        createTask(2, 'Child', 1, 1),
+        createTask(3, 'Destination', 0, 1)
+      ]
+    }));
+    const originalTasks = service.state().tasks;
+
+    service.reorderTasks(1, 3, 'after');
+    const reorderedTasks = service.state().tasks;
+
+    service.undo();
+    expect(service.state().tasks).toEqual(originalTasks);
+    service.redo();
+    expect(service.state().tasks).toEqual(reorderedTasks);
+  });
+
+  it('undoes and redoes holiday edits', () => {
+    const originalHolidays = service.state().holidays;
+
+    service.addHoliday('2026-10-07', 'Mid-week Holiday');
+    service.undo();
+    expect(service.state().holidays).toEqual(originalHolidays);
+
+    service.redo();
+    expect(service.state().holidays).toContainEqual({
+      date: '2026-10-07',
+      name: 'Mid-week Holiday'
+    });
+  });
+
+  it('undoes and redoes clearing a project', () => {
+    const originalState = service.state();
+
+    service.clearProject();
+    service.undo();
+    expect(service.state()).toEqual(originalState);
+
+    service.redo();
+    expect(service.state().tasks).toEqual([]);
+  });
+
+  it('undoes and redoes imported-state replacement', () => {
+    const originalState = service.state();
+    const importedState = {
+      ...originalState,
+      tasks: [createTask(40, 'Imported task', 0, 2)]
+    };
+
+    service.loadImportedState(importedState);
+    service.undo();
+    expect(service.state()).toEqual(originalState);
+
+    service.redo();
+    expect(service.state()).toEqual(importedState);
+  });
+
+  it('does not record no-op edits in history', () => {
+    const originalName = service.state().tasks.find((item) => item.uid === 3)!.name;
+
+    service.updateTaskField(3, 'name', originalName);
+
+    expect(service.canUndo()).toBe(false);
+  });
+
+  it('does not reuse a deleted task UID for a later task', () => {
+    const deletedUid = Math.max(...service.state().tasks.map((task) => task.uid));
+    service.selectTask(deletedUid);
+    service.deleteTask();
+
+    service.addTask();
+
+    expect(service.selectedUid()).toBeGreaterThan(deletedUid);
+  });
+
+  it('does not serialize undo or redo history to localStorage', () => {
+    const storedValues = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storedValues.get(key) ?? null,
+      setItem: (key: string, value: string) => storedValues.set(key, value),
+      removeItem: (key: string) => storedValues.delete(key)
+    });
+    service.updateTaskField(3, 'name', 'Updated requirements');
+    TestBed.flushEffects();
+    const savedState = JSON.parse(storedValues.get('projectflow-angular-v1')!);
+
+    expect(savedState).not.toHaveProperty('undoStack');
+    expect(savedState).not.toHaveProperty('redoStack');
+    expect(Object.keys(savedState).sort()).toEqual([
+      'customNonWork',
+      'holidays',
+      'projectStart',
+      'tasks',
+      'weekendDays',
+      'workingDays'
+    ]);
+    vi.unstubAllGlobals();
+  });
+
   it('moves a leaf task before the requested sibling', () => {
     service.state.update((state) => ({
       ...state,

@@ -50,6 +50,24 @@
       >
         ⇤ Outdent
       </button>
+      <button
+        type="button"
+        class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-md text-xs font-semibold text-slate-700 shadow-sm transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+        aria-label="Undo"
+        [disabled]="!store.canUndo()"
+        (click)="onUndo()"
+      >
+        ↶ Undo
+      </button>
+      <button
+        type="button"
+        class="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-md text-xs font-semibold text-slate-700 shadow-sm transition-colors disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+        aria-label="Redo"
+        [disabled]="!store.canRedo()"
+        (click)="onRedo()"
+      >
+        ↷ Redo
+      </button>
     </div>
 
     <!-- Timeline Zoom Controls -->

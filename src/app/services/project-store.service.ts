@@ -18,12 +18,17 @@ import {
 } from '../utils/date-utils';
 
 const LS_KEY = 'projectflow-angular-v1';
+const MAX_HISTORY_ENTRIES = 100;
 
 @Injectable({ providedIn: 'root' })
 export class ProjectStoreService {
   private uidSeq = 1;
+  private readonly undoHistory = signal<ProjectState[]>([]);
+  private readonly redoHistory = signal<ProjectState[]>([]);
 
   readonly state = signal<ProjectState>(this.getInitialState());
+  readonly canUndo = computed(() => this.undoHistory().length > 0);
+  readonly canRedo = computed(() => this.redoHistory().length > 0);
   readonly selectedUid = signal<number | null>(null);
   readonly linkMode = signal<boolean>(false);
   readonly linkFrom = signal<number | null>(null);
@@ -146,7 +151,7 @@ export class ProjectStoreService {
   // --- Task mutations ---
 
   addTask(): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = [...s.tasks];
       const selId = this.selectedUid();
       const selIdx = selId !== null ? tasks.findIndex((t) => t.uid === selId) : tasks.length - 1;
@@ -177,7 +182,7 @@ export class ProjectStoreService {
     const selId = this.selectedUid();
     if (selId === null) return;
 
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = [...s.tasks];
       const idx = tasks.findIndex((t) => t.uid === selId);
       if (idx < 0) return s;
@@ -187,13 +192,14 @@ export class ProjectStoreService {
         end = this.childRange(tasks, idx)[1];
       }
 
-      const removed = tasks.splice(idx, end - idx + 1).map((t) => t.uid);
-      for (const t of tasks) {
-        t.preds = t.preds.filter((p) => !removed.includes(p));
-      }
+      const removed = new Set(tasks.splice(idx, end - idx + 1).map((task) => task.uid));
+      const updatedTasks = tasks.map((task) => ({
+        ...task,
+        preds: task.preds.filter((pred) => !removed.has(pred))
+      }));
 
       this.selectedUid.set(null);
-      return { ...s, tasks };
+      return { ...s, tasks: updatedTasks };
     });
   }
 
@@ -201,7 +207,7 @@ export class ProjectStoreService {
     const selId = this.selectedUid();
     if (selId === null) return;
 
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = [...s.tasks];
       const i = tasks.findIndex((t) => t.uid === selId);
       if (i <= 0) return s;
@@ -222,7 +228,7 @@ export class ProjectStoreService {
     const selId = this.selectedUid();
     if (selId === null) return;
 
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = [...s.tasks];
       const i = tasks.findIndex((t) => t.uid === selId);
       if (i < 0 || tasks[i].level <= 0) return s;
@@ -236,7 +242,7 @@ export class ProjectStoreService {
   }
 
   toggleCollapse(uid: number): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = s.tasks.map((t) => (t.uid === uid ? { ...t, collapsed: !t.collapsed } : t));
       return { ...s, tasks };
     });
@@ -247,7 +253,7 @@ export class ProjectStoreService {
   }
 
   updateTaskField(uid: number, field: keyof Task, value: unknown): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const tasks = s.tasks.map((t) => {
         if (t.uid !== uid) return t;
         const updated = { ...t };
@@ -270,7 +276,7 @@ export class ProjectStoreService {
   }
 
   reorderTasks(sourceUid: number, targetUid: number, position: 'before' | 'after'): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const sourceIndex = s.tasks.findIndex((task) => task.uid === sourceUid);
       const targetIndex = s.tasks.findIndex((task) => task.uid === targetUid);
       if (sourceIndex < 0 || targetIndex < 0) return s;
@@ -325,7 +331,7 @@ export class ProjectStoreService {
     }
 
     // Link from -> uid
-    this.state.update((s) => {
+    this.commitState((s) => {
       if (this.wouldCycle(s.tasks, uid, from)) {
         alert('Cannot link tasks: circular dependency detected.');
         return s;
@@ -347,7 +353,7 @@ export class ProjectStoreService {
   // --- Calendar & Holidays mutations ---
 
   addHoliday(date: string, name: string): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const holidays = s.holidays.filter((h) => h.date !== date);
       holidays.push({ date, name: name.trim() || 'Public Holiday' });
       return { ...s, holidays };
@@ -355,18 +361,18 @@ export class ProjectStoreService {
   }
 
   deleteHoliday(date: string): void {
-    this.state.update((s) => ({
+    this.commitState((s) => ({
       ...s,
       holidays: s.holidays.filter((h) => h.date !== date)
     }));
   }
 
   setWeekendDays(days: number[]): void {
-    this.state.update((s) => ({ ...s, weekendDays: days }));
+    this.commitState((s) => ({ ...s, weekendDays: [...days] }));
   }
 
   toggleWorkingWeekend(date: string): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const workingDays = s.workingDays.includes(date)
         ? s.workingDays.filter((d) => d !== date)
         : [...s.workingDays, date];
@@ -375,7 +381,7 @@ export class ProjectStoreService {
   }
 
   toggleCustomNonWork(date: string): void {
-    this.state.update((s) => {
+    this.commitState((s) => {
       const customNonWork = s.customNonWork.includes(date)
         ? s.customNonWork.filter((d) => d !== date)
         : [...s.customNonWork, date];
@@ -392,31 +398,101 @@ export class ProjectStoreService {
   }
 
   resetDemoData(): void {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(LS_KEY);
     this.uidSeq = 1;
-    this.state.set(this.getDemoState());
+    this.commitState(() => this.getDemoState());
     this.selectedUid.set(null);
   }
 
   clearProject(): void {
     this.uidSeq = 1;
-    this.state.set({
+    this.commitState(() => ({
       projectStart: d2s(new Date()),
       holidays: [],
       weekendDays: [0, 6],
       workingDays: [],
       customNonWork: [],
       tasks: []
-    });
+    }));
     this.selectedUid.set(null);
   }
 
   loadImportedState(newState: ProjectState): void {
-    this.uidSeq = newState.tasks.length
-      ? Math.max(...newState.tasks.map((t) => t.uid)) + 1
-      : 1;
-    this.state.set(newState);
+    this.commitState(() => this.snapshot(newState));
+    this.updateUidSequence(this.state().tasks);
     this.selectedUid.set(null);
+  }
+
+  undo(): void {
+    const history = this.undoHistory();
+    const previousState = history.at(-1);
+    if (!previousState) return;
+
+    this.undoHistory.set(history.slice(0, -1));
+    this.redoHistory.update((redo) => this.limitHistory([...redo, this.snapshot(this.state())]));
+    this.restoreState(previousState);
+  }
+
+  redo(): void {
+    const history = this.redoHistory();
+    const nextState = history.at(-1);
+    if (!nextState) return;
+
+    this.redoHistory.set(history.slice(0, -1));
+    this.undoHistory.update((undo) => this.limitHistory([...undo, this.snapshot(this.state())]));
+    this.restoreState(nextState);
+  }
+
+  private commitState(update: (state: ProjectState) => ProjectState): void {
+    this.state.update((currentState) => {
+      const previousSnapshot = this.snapshot(currentState);
+      const nextState = update(currentState);
+      const nextSnapshot = this.snapshot(nextState);
+
+      if (JSON.stringify(previousSnapshot) !== JSON.stringify(nextSnapshot)) {
+        this.undoHistory.update((history) => this.limitHistory([...history, previousSnapshot]));
+        this.redoHistory.set([]);
+      }
+
+      return nextState;
+    });
+  }
+
+  private snapshot(state: ProjectState): ProjectState {
+    return {
+      projectStart: state.projectStart,
+      holidays: state.holidays.map((holiday) => ({ ...holiday })),
+      weekendDays: [...state.weekendDays],
+      workingDays: [...state.workingDays],
+      customNonWork: [...state.customNonWork],
+      tasks: state.tasks.map((task) => ({
+        uid: task.uid,
+        name: task.name,
+        dur: task.dur,
+        level: task.level,
+        preds: [...task.preds],
+        prog: task.prog,
+        startInput: task.startInput,
+        actualStart: task.actualStart,
+        actualEnd: task.actualEnd,
+        collapsed: task.collapsed,
+        start: null,
+        finish: null
+      }))
+    };
+  }
+
+  private limitHistory(history: ProjectState[]): ProjectState[] {
+    return history.slice(-MAX_HISTORY_ENTRIES);
+  }
+
+  private restoreState(state: ProjectState): void {
+    const restoredState = this.snapshot(state);
+    this.state.set(restoredState);
+    this.updateUidSequence(restoredState.tasks);
+  }
+
+  private updateUidSequence(tasks: Task[]): void {
+    this.uidSeq = tasks.length ? Math.max(...tasks.map((task) => task.uid)) + 1 : 1;
   }
 
   // --- Scheduler engine ---
