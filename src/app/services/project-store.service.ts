@@ -269,14 +269,36 @@ export class ProjectStoreService {
     });
   }
 
-  reorderTasks(sourceIndex: number, targetIndex: number): void {
-    if (sourceIndex === targetIndex) return;
-
+  reorderTasks(sourceUid: number, targetUid: number, position: 'before' | 'after'): void {
     this.state.update((s) => {
-      const tasks = [...s.tasks];
-      const [moved] = tasks.splice(sourceIndex, 1);
-      tasks.splice(targetIndex, 0, moved);
-      return { ...s, tasks };
+      const sourceIndex = s.tasks.findIndex((task) => task.uid === sourceUid);
+      const targetIndex = s.tasks.findIndex((task) => task.uid === targetUid);
+      if (sourceIndex < 0 || targetIndex < 0) return s;
+
+      const sourceEnd = this.isSummaryIndex(s.tasks, sourceIndex)
+        ? this.childRange(s.tasks, sourceIndex)[1]
+        : sourceIndex;
+      if (targetIndex >= sourceIndex && targetIndex <= sourceEnd) return s;
+
+      const moved = s.tasks.slice(sourceIndex, sourceEnd + 1);
+      const remaining = [
+        ...s.tasks.slice(0, sourceIndex),
+        ...s.tasks.slice(sourceEnd + 1)
+      ];
+      const remainingTargetIndex = remaining.findIndex((task) => task.uid === targetUid);
+      const targetEnd = this.isSummaryIndex(remaining, remainingTargetIndex)
+        ? this.childRange(remaining, remainingTargetIndex)[1]
+        : remainingTargetIndex;
+      const insertionIndex =
+        position === 'before' ? remainingTargetIndex : targetEnd + 1;
+      const levelDelta = remaining[remainingTargetIndex].level - moved[0].level;
+      const adjustedBlock = moved.map((task) => ({
+        ...task,
+        level: task.level + levelDelta
+      }));
+
+      remaining.splice(insertionIndex, 0, ...adjustedBlock);
+      return { ...s, tasks: remaining };
     });
   }
 

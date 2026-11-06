@@ -108,6 +108,96 @@ describe('ProjectStoreService', () => {
     expect(service.wouldCycle(tasks, 1, 2)).toBe(true);
   });
 
+  it('moves a summary subtree while preserving descendant order and relative levels', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        createTask(1, 'Parent', 0, 0),
+        createTask(2, 'Summary', 1, 0),
+        createTask(3, 'Child', 2, 1),
+        createTask(4, 'Nested summary', 2, 0),
+        createTask(5, 'Nested child', 3, 1),
+        createTask(6, 'Other child', 1, 1),
+        createTask(7, 'Destination', 0, 1)
+      ]
+    }));
+
+    service.reorderTasks(2, 7, 'before');
+
+    expect(service.state().tasks.map(({ uid, level }) => [uid, level])).toEqual([
+      [1, 0],
+      [6, 1],
+      [2, 0],
+      [3, 1],
+      [4, 1],
+      [5, 2],
+      [7, 0]
+    ]);
+  });
+
+  it('moves a leaf task before the requested sibling', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        createTask(2, 'First', 0, 1),
+        createTask(3, 'Second', 0, 1),
+        createTask(1, 'Third', 0, 1)
+      ]
+    }));
+
+    service.reorderTasks(1, 2, 'before');
+    expect(service.state().tasks.map((task) => task.uid)).toEqual([1, 2, 3]);
+  });
+
+  it('moves a leaf task after the requested sibling', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        createTask(1, 'First', 0, 1),
+        createTask(2, 'Second', 0, 1),
+        createTask(3, 'Third', 0, 1)
+      ]
+    }));
+
+    service.reorderTasks(1, 2, 'after');
+
+    expect(service.state().tasks.map((task) => task.uid)).toEqual([2, 1, 3]);
+  });
+
+  it('rejects moving a summary onto its own descendant', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        createTask(1, 'Summary', 0, 0),
+        createTask(2, 'Child', 1, 1),
+        createTask(3, 'Destination', 0, 1)
+      ]
+    }));
+    const originalTasks = service.state().tasks;
+
+    service.reorderTasks(1, 2, 'after');
+
+    expect(service.state().tasks).toEqual(originalTasks);
+  });
+
+  it('reorders a collapsed summary subtree by UID rather than visible row index', () => {
+    service.state.update((state) => ({
+      ...state,
+      tasks: [
+        { ...createTask(2, 'Collapsed summary', 0, 0), collapsed: true },
+        createTask(3, 'Hidden child', 1, 1),
+        createTask(1, 'Visible destination', 0, 1)
+      ]
+    }));
+
+    expect(service.visibleTasks().map((task) => task.uid)).toEqual([2, 1]);
+
+    service.reorderTasks(2, 1, 'after');
+
+    expect(service.state().tasks.map((task) => task.uid)).toEqual([1, 2, 3]);
+    expect(service.state().tasks.map((task) => task.level)).toEqual([0, 0, 1]);
+  });
+
   it('should initialize with demo tasks and compute schedule', () => {
     const tasks = service.scheduledTasks();
     expect(tasks.length).toBeGreaterThan(0);

@@ -29,7 +29,7 @@ interface EditingCell {
         </div>
 
         <!-- Table Rows -->
-        @for (t of visibleTasks(); track t.uid; let idx = $index) {
+        @for (t of visibleTasks(); track t.uid) {
           @let isSum = isSummary(t.uid);
           @let isSel = t.uid === store.selectedUid();
           @let status = getStatus(t, isSum);
@@ -43,9 +43,9 @@ interface EditingCell {
             [class.hover:bg-slate-50]="!isSel"
             (click)="onRowClick(t.uid)"
             draggable="true"
-            (dragstart)="onDragStart($event, idx)"
+            (dragstart)="onDragStart($event, t.uid)"
             (dragover)="onDragOver($event)"
-            (drop)="onDrop($event, idx)"
+            (drop)="onDrop($event, t.uid)"
           >
             <!-- ID / Drag handle -->
             <div class="w-[38px] text-center p-1.5 shrink-0 text-slate-400 cursor-grab">
@@ -238,7 +238,7 @@ export class TaskGridComponent {
   readonly allScheduledTasks = this.store.scheduledTasks;
 
   readonly editing = signal<EditingCell | null>(null);
-  private dragSourceIndex: number | null = null;
+  private dragSourceUid: number | null = null;
 
   private readonly today = computed(() => {
     const d = new Date();
@@ -365,11 +365,11 @@ export class TaskGridComponent {
 
   // --- Drag reordering ---
 
-  onDragStart(e: DragEvent, index: number): void {
-    this.dragSourceIndex = index;
+  onDragStart(e: DragEvent, uid: number): void {
+    this.dragSourceUid = uid;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(index));
+      e.dataTransfer.setData('text/plain', String(uid));
     }
   }
 
@@ -380,11 +380,16 @@ export class TaskGridComponent {
     }
   }
 
-  onDrop(e: DragEvent, targetIndex: number): void {
+  onDrop(e: DragEvent, targetUid: number): void {
     e.preventDefault();
-    if (this.dragSourceIndex === null || this.dragSourceIndex === targetIndex) return;
+    const sourceUid = this.dragSourceUid;
+    this.dragSourceUid = null;
+    if (sourceUid === null || sourceUid === targetUid) return;
 
-    this.store.reorderTasks(this.dragSourceIndex, targetIndex);
-    this.dragSourceIndex = null;
+    const row = e.currentTarget;
+    if (!(row instanceof HTMLElement)) return;
+    const bounds = row.getBoundingClientRect();
+    const position = e.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+    this.store.reorderTasks(sourceUid, targetUid, position);
   }
 }
