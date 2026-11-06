@@ -457,10 +457,16 @@ export class ProjectStoreService {
           changed = true;
         }
       }
+
+      if (this.rollupSummaries(tasks, state)) changed = true;
       if (!changed) break;
     }
 
-    // Bottom-up pass for summary rollups
+    return tasks;
+  }
+
+  private rollupSummaries(tasks: Task[], state: ProjectState): boolean {
+    let changed = false;
     for (let i = tasks.length - 1; i >= 0; i--) {
       if (!this.isSummaryIndex(tasks, i)) continue;
       const t = tasks[i];
@@ -487,6 +493,9 @@ export class ProjectStoreService {
         wDur += w;
       }
 
+      if (t.start?.getTime() !== minS?.getTime() || t.finish?.getTime() !== maxF?.getTime()) {
+        changed = true;
+      }
       t.start = minS;
       t.finish = maxF;
       t.dur =
@@ -505,7 +514,7 @@ export class ProjectStoreService {
       t.actualEnd = maxAE ? d2s(maxAE) : null;
     }
 
-    return tasks;
+    return changed;
   }
 
   isSummaryIndex(tasks: Task[], i: number): boolean {
@@ -523,7 +532,22 @@ export class ProjectStoreService {
   wouldCycle(tasks: Task[], tUid: number, predUid: number): boolean {
     if (tUid === predUid) return true;
     const byUid = new Map<number, Task>();
-    tasks.forEach((t) => byUid.set(t.uid, t));
+    const indexByUid = new Map<number, number>();
+    tasks.forEach((t, i) => {
+      byUid.set(t.uid, t);
+      indexByUid.set(t.uid, i);
+    });
+
+    const targetIndex = indexByUid.get(tUid);
+    const predIndex = indexByUid.get(predUid);
+    if (
+      targetIndex !== undefined &&
+      predIndex !== undefined &&
+      this.isSummaryIndex(tasks, targetIndex)
+    ) {
+      const [, endIdx] = this.childRange(tasks, targetIndex);
+      if (predIndex > targetIndex && predIndex <= endIdx) return true;
+    }
 
     const seen = new Set<number>();
     const stack = [predUid];
@@ -533,7 +557,16 @@ export class ProjectStoreService {
       if (seen.has(u)) continue;
       seen.add(u);
       const t = byUid.get(u);
-      if (t) stack.push(...t.preds);
+      const index = indexByUid.get(u);
+      if (t) {
+        stack.push(...t.preds);
+        if (index !== undefined && this.isSummaryIndex(tasks, index)) {
+          const [, endIdx] = this.childRange(tasks, index);
+          for (let i = index + 1; i <= endIdx; i++) {
+            stack.push(tasks[i].uid);
+          }
+        }
+      }
     }
     return false;
   }
