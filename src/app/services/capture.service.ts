@@ -4,12 +4,40 @@ import html2canvas from 'html2canvas';
 @Injectable({ providedIn: 'root' })
 export class CaptureService {
   async captureElement(element: HTMLElement): Promise<string> {
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff'
-    });
-    return canvas.toDataURL('image/png');
+    const width = Math.max(element.scrollWidth, element.clientWidth);
+    const height = Math.max(element.scrollHeight, element.clientHeight);
+    const originalStyles = {
+      overflow: element.style.overflow,
+      width: element.style.width,
+      height: element.style.height,
+      maxWidth: element.style.maxWidth,
+      maxHeight: element.style.maxHeight,
+    };
+
+    element.style.overflow = 'visible';
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+    element.style.maxWidth = 'none';
+    element.style.maxHeight = 'none';
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width,
+        height,
+        windowWidth: Math.max(document.documentElement.clientWidth, width),
+        windowHeight: Math.max(document.documentElement.clientHeight, height),
+      });
+      return canvas.toDataURL('image/png');
+    } finally {
+      element.style.overflow = originalStyles.overflow;
+      element.style.width = originalStyles.width;
+      element.style.height = originalStyles.height;
+      element.style.maxWidth = originalStyles.maxWidth;
+      element.style.maxHeight = originalStyles.maxHeight;
+    }
   }
 }

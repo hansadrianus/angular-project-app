@@ -140,7 +140,7 @@ export class App {
     if (this.isExporting) return;
     this.isExporting = true;
     try {
-      const ganttElem = this.ganttRef()?.ganttBody()?.nativeElement;
+      const ganttElem = this.ganttRef()?.ganttCaptureElement()?.nativeElement;
       await this.excelService.exportProject(
         this.store.state(),
         this.store.scheduledTasks(),

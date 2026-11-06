@@ -398,7 +398,7 @@ interface DepArrow {
 export class GanttComponent {
   readonly store = inject(ProjectStoreService);
 
-  readonly ganttWrap = viewChild<ElementRef<HTMLElement>>('ganttWrap');
+  readonly ganttCaptureElement = viewChild<ElementRef<HTMLElement>>('ganttWrap');
   readonly ganttBody = viewChild<ElementRef<HTMLElement>>('ganttBody');
 
   readonly rowH = 28;
