@@ -281,6 +281,59 @@ describe('App', () => {
     fixture.destroy();
   });
 
+  it('moves focus into the calendar editor when opened from a date header by keyboard', async () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Task', 0, 2)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const dateHeader = compiled.querySelector(
+      '[aria-label^="2026-10-05"]'
+    ) as HTMLElement;
+    dateHeader.focus();
+    dateHeader.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const holidayName = compiled.querySelector(
+      'input[aria-label="Holiday name (optional)"]'
+    ) as HTMLInputElement;
+    expect(document.activeElement).toBe(holidayName);
+    fixture.destroy();
+  });
+
+  it('restores focus to the date header when its keyboard-opened calendar editor closes', async () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Task', 0, 2)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const dateHeader = compiled.querySelector(
+      '[aria-label^="2026-10-05"]'
+    ) as HTMLElement;
+    dateHeader.focus();
+    dateHeader.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', bubbles: true })
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const closeButton = compiled.querySelector(
+      'button[aria-label="Close calendar editor"]'
+    ) as HTMLButtonElement;
+    closeButton.focus();
+    closeButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(document.activeElement).toBe(dateHeader);
+    fixture.destroy();
+  });
+
   it('dispatches undo and redo keyboard shortcuts through the store', () => {
     const fixture = TestBed.createComponent(App);
     const store = TestBed.inject(ProjectStoreService);

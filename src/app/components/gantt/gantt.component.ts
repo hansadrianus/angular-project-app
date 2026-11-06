@@ -1,6 +1,8 @@
 import {
+  afterNextRender,
   Component,
   ElementRef,
+  Injector,
   computed,
   inject,
   signal,
@@ -344,6 +346,7 @@ interface DepArrow {
               <div class="font-semibold text-red-900 mb-1">🏖️ {{ dt.name }}</div>
               <button
                 type="button"
+                #dayEditorInitialFocus
                 class="w-full text-left px-2 py-1.5 rounded bg-red-100 hover:bg-red-200 text-red-800 font-medium"
                 (click)="removeHoliday(p.dateStr)"
               >
@@ -356,6 +359,7 @@ interface DepArrow {
               <div class="flex gap-1">
                 <input
                   #holNameInput
+                  #dayEditorInitialFocus
                   aria-label="Holiday name (optional)"
                   type="text"
                   placeholder="Holiday name (optional)"
@@ -421,6 +425,9 @@ export class GanttComponent {
 
   readonly ganttCaptureElement = viewChild<ElementRef<HTMLElement>>('ganttWrap');
   readonly ganttBody = viewChild<ElementRef<HTMLElement>>('ganttBody');
+  private readonly dayEditorInitialFocus =
+    viewChild<ElementRef<HTMLElement>>('dayEditorInitialFocus');
+  private readonly injector = inject(Injector);
 
   readonly rowH = 28;
   readonly dayW = this.store.zoomLevel;
@@ -430,6 +437,7 @@ export class GanttComponent {
 
   readonly popover = signal<DayPopoverState | null>(null);
   private drag = signal<DragState | null>(null);
+  private keyboardDateHeader: HTMLElement | null = null;
 
   protected readonly Math = Math;
   protected readonly s2d = s2d;
@@ -585,13 +593,23 @@ export class GanttComponent {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
 
-    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const header = event.currentTarget as HTMLElement;
+    const bounds = header.getBoundingClientRect();
+    this.keyboardDateHeader = header;
     this.popover.set({
       dateStr,
       x: Math.min(bounds.left, window.innerWidth - 290),
       y: Math.min(bounds.bottom + 10, window.innerHeight - 240),
       holidayNameInput: ''
     });
+    afterNextRender(
+      () => {
+        if (this.keyboardDateHeader === header && this.popover()?.dateStr === dateStr) {
+          this.dayEditorInitialFocus()?.nativeElement.focus();
+        }
+      },
+      { injector: this.injector }
+    );
   }
 
   getTaskBarAccessibleLabel(task: Task): string {
@@ -636,6 +654,7 @@ export class GanttComponent {
     const curDrag = this.drag();
     if (curDrag && curDrag.moved) return;
 
+    this.keyboardDateHeader = null;
     const x = Math.min(event.clientX, window.innerWidth - 290);
     const y = Math.min(event.clientY + 10, window.innerHeight - 240);
 
@@ -648,7 +667,10 @@ export class GanttComponent {
   }
 
   closeDayPopover(): void {
+    const keyboardDateHeader = this.keyboardDateHeader;
+    this.keyboardDateHeader = null;
     this.popover.set(null);
+    keyboardDateHeader?.focus();
   }
 
   updateHolidayNameInput(val: string): void {

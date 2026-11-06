@@ -35,3 +35,13 @@
 
 - Commit message: `test: verify ProjectFlow interactions and accessibility`
 - Contains only the Task 5 files listed above. The pre-existing design-doc change and untracked plans directory were preserved.
+
+## Review round 1 fix: keyboard calendar editor focus
+
+- **Finding:** Enter or Space opened the date editor without moving focus from the date header, and closing the keyboard-opened editor did not return focus.
+- **Fix:** After keyboard activation, focus the editor's holiday-name input (or its remove-holiday action when applicable) after Angular renders it. When that keyboard-opened editor closes, restore focus to the triggering header. Pointer-opened editors retain their existing focus behavior.
+- **Coverage:** Added app-level Gantt tests for focus moving into the editor and focus returning to the triggering header. The close test explicitly focuses the close control before activating it.
+- **TDD RED:** Before implementing the open-focus behavior, the app spec target failed as expected: 1 failed, 15 passed; `document.activeElement` remained the date header instead of the holiday-name input. Removing focus restoration also made the close-restore test fail.
+- **Test command:** Angular CLI test target `angular-project-app:test` with `--include=src/app/app.spec.ts`.
+- **Final output:** 1 test file passed; 16 tests passed. The runner emitted the existing Node `localStorage` ExperimentalWarning; no test failures.
+- **Full-suite verification:** Angular CLI target `angular-project-app:test` — 3 test files passed; 46 tests passed. The existing Node `localStorage` ExperimentalWarning was emitted.
