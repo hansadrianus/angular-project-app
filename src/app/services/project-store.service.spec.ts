@@ -243,6 +243,18 @@ describe('ProjectStoreService', () => {
     expect(service.selectedUid()).toBeGreaterThan(deletedUid);
   });
 
+  it('does not reuse a deleted task UID after undo and redo', () => {
+    const deletedUid = Math.max(...service.state().tasks.map((task) => task.uid));
+    service.selectTask(deletedUid);
+    service.deleteTask();
+    service.undo();
+    service.redo();
+
+    service.addTask();
+
+    expect(service.selectedUid()).toBeGreaterThan(deletedUid);
+  });
+
   it('does not serialize undo or redo history to localStorage', () => {
     const storedValues = new Map<string, string>();
     vi.stubGlobal('localStorage', {

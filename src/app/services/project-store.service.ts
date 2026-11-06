@@ -492,7 +492,10 @@ export class ProjectStoreService {
   }
 
   private updateUidSequence(tasks: Task[]): void {
-    this.uidSeq = tasks.length ? Math.max(...tasks.map((task) => task.uid)) + 1 : 1;
+    this.uidSeq = Math.max(
+      this.uidSeq,
+      tasks.length ? Math.max(...tasks.map((task) => task.uid)) + 1 : 1
+    );
   }
 
   // --- Scheduler engine ---
