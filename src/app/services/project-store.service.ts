@@ -490,6 +490,10 @@ export class ProjectStoreService {
     const restoredState = this.snapshot(state);
     this.state.set(restoredState);
     this.updateUidSequence(restoredState.tasks);
+    const selectedUid = this.selectedUid();
+    if (selectedUid !== null && !restoredState.tasks.some((task) => task.uid === selectedUid)) {
+      this.selectedUid.set(null);
+    }
   }
 
   private updateUidSequence(tasks: Task[]): void {

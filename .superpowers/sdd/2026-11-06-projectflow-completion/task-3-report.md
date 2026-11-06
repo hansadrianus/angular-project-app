@@ -53,3 +53,10 @@ The pre-existing changes in `docs/superpowers/specs/2026-11-06-projectflow-desig
 - **TDD RED:** Angular CLI MCP `run_target` for project `angular-project-app`, target `test`, options `watch=false` and `include=[src/app/services/project-store.service.spec.ts]` — 1 failed, 24 passed. The new task was inserted at index 0 because the selected UID no longer existed after undo.
 - **Fix:** `addTask()` now uses the last task as its insertion point when selection is null or references a missing task. A valid selected task continues to determine the insertion point and hierarchy level.
 - **TDD GREEN:** Re-ran the same focused Angular CLI test target — 1 test file passed; 25 tests passed. The runner emitted its existing benign localStorage warning.
+
+## Review round 3 fix: clear selection when undo removes its task
+
+- Added regression coverage verifying undo clears selection when the restored state omits the selected task, while preserving selection when the selected task remains present.
+- **TDD RED:** Angular CLI test target `angular-project-app:test` with `watch=false` and `include=[src/app/services/project-store.service.spec.ts]` — 1 failed, 26 passed. The failure was expected: `selectedUid()` remained `13` after undo restored a state without task 13.
+- **Fix:** `restoreState()` now clears a non-null selected UID when no task in the restored state has that UID. Valid selections remain unchanged.
+- **TDD GREEN:** Re-ran the same focused test target — 1 test file passed; 27 tests passed. The runner emitted its existing benign localStorage warning.

@@ -384,6 +384,25 @@ describe('ProjectStoreService', () => {
     expect(service.state().tasks.map((task) => task.uid).slice(0, -1)).toEqual(originalUids);
   });
 
+  it('clears selection when undo restores a state without the selected task', () => {
+    service.addTask();
+    const addedUid = service.selectedUid();
+
+    service.undo();
+
+    expect(service.state().tasks.some((task) => task.uid === addedUid)).toBe(false);
+    expect(service.selectedUid()).toBeNull();
+  });
+
+  it('preserves selection when undo restores a state containing the selected task', () => {
+    service.selectTask(3);
+    service.updateTaskField(3, 'name', 'Updated requirements');
+
+    service.undo();
+
+    expect(service.selectedUid()).toBe(3);
+  });
+
   it('should delete a selected task and clear predecessors referencing it', () => {
     // Wireframes (uid 4) depends on Requirements (uid 3)
     service.selectTask(3);
