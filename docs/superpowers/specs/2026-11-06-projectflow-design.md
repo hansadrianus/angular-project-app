@@ -1,7 +1,7 @@
 # ProjectFlow — Design Doc
 
 **Date:** 2026-11-06
-**Status:** Pending approval
+**Status:** Approved
 
 ## Intent and why
 
@@ -17,6 +17,7 @@ A browser-based project management app in the spirit of Microsoft Project, built
 - Plan Start / Plan Finish (scheduled) vs Actual Start / Actual End (user-entered)
 - % complete with duration-weighted rollup to summary tasks
 - Drag-and-drop row reordering (summary moves its subtree; levels clamp to keep hierarchy valid)
+- Undo/redo for project mutations, including task edits, dependency changes, date/duration changes, reorder, holiday changes, and import; undo/redo history is session-only and is not persisted
 - Drag Gantt bars to move (changes plan start) and drag edges to resize (changes duration)
 - Status column (read-only, computed): Done / In progress / Not started / Overdue
 - Dashboard overlay: overall completion, task-status donut, progress by phase, "needs attention" (overdue + started-late)
@@ -30,7 +31,6 @@ A browser-based project management app in the spirit of Microsoft Project, built
 - No server, accounts, or multi-user sync — single-browser localStorage only
 - No resource/cost management, baselines, or critical-path highlighting (later layers)
 - No native Excel charts or pivot tables in the export (SheetJS community edition can't write them); the Timeline sheet uses an embedded image
-- No undo/redo
 - No printing / PDF export
 
 ## Anti-goals
@@ -46,7 +46,7 @@ A browser-based project management app in the spirit of Microsoft Project, built
 - Vitest for unit tests
 - Strict TypeScript, no `any`
 - Must pass AXE / WCAG AA (focus management, contrast, ARIA)
-- Libraries: SheetJS (xlsx) for Excel read/write, html2canvas for the Gantt image capture
+- Libraries: SheetJS (`xlsx`) for importing XLSX/CSV, ExcelJS for styled XLSX export and embedded Gantt image, html2canvas for capturing the full current Gantt view
 
 ## Approaches considered
 
@@ -111,7 +111,7 @@ interface ProjectState {
 ### State & services
 
 - `ProjectStoreService` (`providedIn: 'root'`) — holds `ProjectState` as signals, exposes mutations (add/delete/indent/outdent/link/move/setCell/…), runs the scheduler as a `computed`, autosaves to localStorage (debounced)
-- `ExcelService` — export (3 sheets) and import (parse, rebuild hierarchy, resolve predecessors)
+- `ExcelService` — import via SheetJS (parse, rebuild hierarchy, resolve predecessors); export via ExcelJS (3 styled sheets, embedded timeline image)
 - `CaptureService` — html2canvas wrapper for the Timeline sheet image
 
 ### Excel format (round-trip contract)
@@ -120,7 +120,7 @@ interface ProjectState {
 
 **Executive Summary sheet:** title, generated date, overall completion (text bar), plan start/finish, tasks done, overdue count, status breakdown with bar chart column, phase table (plan/actual dates, % complete, progress bar), milestone table, needs-attention list.
 
-**Timeline sheet:** title + html2canvas image of the current Gantt.
+**Timeline sheet:** title + html2canvas image of the full current Gantt view, including its date headers and task bars. ExcelJS embeds the PNG because SheetJS Community Edition does not write embedded images.
 
 **Import** reads the Tasks sheet (or first sheet), rebuilds levels from indentation, resolves predecessors by row number, restores plan start as the scheduling anchor, keeps holidays already in the app.
 
@@ -129,15 +129,18 @@ interface ProjectState {
 - **Project size / virtualization:** No row virtualization in v1. Target is small-to-medium projects (up to a few hundred tasks), which the DOM-based grid and Gantt handle fine. If larger projects become a need, virtualization is a later, additive change. *(Builder's call.)*
 - **Import data-loss protection:** Import asks for confirmation before replacing the current project ("Import will replace your current project. Continue?"). This satisfies the "no data loss on import" anti-goal at trivial UX cost. *(Builder's call.)*
 - **Summary tasks as predecessors:** See open question below.
+- **Undo/redo history:** Keep up to 100 snapshots in memory for the current browser session; persist only the current project state in localStorage. *(Builder's call; avoids unbounded memory growth.)*
 
-## Open question
+## Decisions from the user
 
-**Can a summary task be a predecessor?** The prototype allows it, but the scheduler computes summary rollups after the leaf pass, so a leaf linked to a summary schedules off a one-render-stale finish. Two resolutions: (a) interleave rollups into the fixed-point iteration so summary predecessors schedule correctly, or (b) forbid linking to summary tasks. Awaiting user decision.
+- **Summary tasks may be predecessors.** The scheduler must calculate summary rollups within its scheduling iteration so downstream tasks always use the current rolled-up finish, not a stale value.
+- **Undo/redo and subtree reorder are required.** Undo/redo covers project mutations; dragging a summary task moves its whole subtree.
 
 ## What's left to the builder
 
 - Exact component file layout under `src/app/`
 - Tailwind class choices for the visual design (match the prototype's look)
 - Signal Form vs plain inputs for inline cell editing (builder's call; cells are simple enough that plain inputs are fine)
+- Undo/redo keyboard shortcuts and toolbar placement (builder's call; provide visible toolbar buttons and Ctrl+Z / Ctrl+Y)
 - Test coverage: scheduler (working-day math, rollups, circular guard), Excel round-trip, store mutations
 - Accessibility pass: keyboard navigation of the grid, ARIA roles for the Gantt, focus management in overlays
