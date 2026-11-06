@@ -184,6 +184,63 @@ describe('App', () => {
     fixture.destroy();
   });
 
+  it('reorders siblings with Alt+Arrow keys and moves summary subtrees together', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [
+      createTask(1, 'Summary A', 0, 0),
+      createTask(2, 'Child A1', 1, 1),
+      createTask(3, 'Child A2', 1, 1),
+      createTask(4, 'Summary B', 0, 0),
+      createTask(5, 'Child B', 1, 1),
+      createTask(6, 'Standalone', 0, 1)
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const childRow = compiled.querySelector(
+      '[role="row"][aria-label="Task: Child A1"]'
+    ) as HTMLElement;
+    expect(childRow?.getAttribute('aria-keyshortcuts')).toBe('Alt+ArrowUp Alt+ArrowDown');
+    expect(childRow?.getAttribute('title')).toContain('Alt+ArrowUp/Down');
+    const summaryToggle = compiled.querySelector(
+      'button[aria-label="Collapse Summary A"]'
+    ) as HTMLButtonElement;
+    summaryToggle.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true })
+    );
+    expect(store.state().tasks.map((task) => task.uid)).toEqual([1, 2, 3, 4, 5, 6]);
+
+    childRow.focus();
+    childRow.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true })
+    );
+    fixture.detectChanges();
+    expect(store.state().tasks.map((task) => task.uid)).toEqual([1, 3, 2, 4, 5, 6]);
+
+    const summaryRow = compiled.querySelector(
+      '[role="row"][aria-label="Task: Summary A"]'
+    ) as HTMLElement;
+    summaryRow.focus();
+    summaryRow.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true })
+    );
+    fixture.detectChanges();
+    expect(store.state().tasks.map((task) => task.uid)).toEqual([4, 5, 1, 3, 2, 6]);
+    expect(store.state().tasks.map((task) => task.level)).toEqual([0, 1, 0, 1, 1, 0]);
+
+    const movedSummaryRow = compiled.querySelector(
+      '[role="row"][aria-label="Task: Summary A"]'
+    ) as HTMLElement;
+    movedSummaryRow.focus();
+    movedSummaryRow.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true, bubbles: true })
+    );
+    fixture.detectChanges();
+    expect(store.state().tasks.map((task) => task.uid)).toEqual([1, 3, 2, 4, 5, 6]);
+    fixture.destroy();
+  });
+
   it('moves a summary and its descendants together through the task grid', () => {
     const fixture = TestBed.createComponent(App);
     const store = TestBed.inject(ProjectStoreService);
@@ -278,6 +335,78 @@ describe('App', () => {
     expect(
       compiled.querySelector('[aria-label="Task bar: Accessible task, starts 2026-10-05, finishes 2026-10-06"]')
     ).toBeTruthy();
+    fixture.destroy();
+  });
+
+  it('moves and resizes a focused Gantt bar with arrow keys', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Keyboard schedule', 0, 3)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const bar = compiled.querySelector(
+      '[aria-label^="Task bar: Keyboard schedule"]'
+    ) as HTMLElement;
+    expect(bar?.getAttribute('aria-keyshortcuts')).toBe(
+      'ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight'
+    );
+    expect(bar?.getAttribute('title')).toContain('Shift+ArrowLeft/Right');
+    bar.focus();
+
+    const moveEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true
+    });
+    bar.dispatchEvent(moveEvent);
+    fixture.detectChanges();
+    expect(moveEvent.defaultPrevented).toBe(true);
+    expect(d2s(store.scheduledTasks()[0].start!)).toBe('2026-10-06');
+    expect(store.scheduledTasks()[0].dur).toBe(3);
+
+    bar.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    fixture.detectChanges();
+    expect(store.scheduledTasks()[0].dur).toBe(4);
+
+    bar.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    fixture.detectChanges();
+    expect(store.scheduledTasks()[0].dur).toBe(3);
+
+    const nestedEditor = document.createElement('input');
+    bar.append(nestedEditor);
+    nestedEditor.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowRight',
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    fixture.detectChanges();
+    expect(d2s(store.scheduledTasks()[0].start!)).toBe('2026-10-06');
+    bar.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowLeft',
+        bubbles: true,
+        cancelable: true
+      })
+    );
+    fixture.detectChanges();
+    expect(d2s(store.scheduledTasks()[0].start!)).toBe('2026-10-05');
     fixture.destroy();
   });
 

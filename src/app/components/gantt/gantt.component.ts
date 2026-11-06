@@ -242,6 +242,8 @@ interface DepArrow {
                   role="button"
                   tabindex="0"
                   [attr.aria-label]="getTaskBarAccessibleLabel(t)"
+                  aria-keyshortcuts="ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight"
+                  title="Move planned start one calendar day with ArrowLeft/Right; change duration one day with Shift+ArrowLeft/Right"
                   class="absolute h-[14px] rounded z-10 cursor-grab flex overflow-hidden shadow-sm"
                   [style.left.px]="bX"
                   [style.top.px]="y"
@@ -619,15 +621,39 @@ export class GanttComponent {
   }
 
   onTaskBarKeydown(event: KeyboardEvent, uid: number): void {
-    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) {
+    if (event.target !== event.currentTarget) return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (this.store.linkMode()) {
+        this.store.handleLinkTask(uid);
+        return;
+      }
+      this.store.selectTask(uid);
       return;
     }
+
+    if (
+      (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      this.store.linkMode()
+    ) {
+      return;
+    }
+
+    const task = this.allScheduledTasks().find((item) => item.uid === uid);
+    if (!task?.start || task.dur <= 0 || this.isSummary(uid)) return;
+
     event.preventDefault();
-    if (this.store.linkMode()) {
-      this.store.handleLinkTask(uid);
-      return;
-    }
     this.store.selectTask(uid);
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    if (event.shiftKey) {
+      this.store.updateTaskField(uid, 'dur', Math.max(1, task.dur + direction));
+    } else {
+      this.store.updateTaskField(uid, 'startInput', d2s(addDays(task.start, direction)));
+    }
   }
 
   getX(d: Date): number {

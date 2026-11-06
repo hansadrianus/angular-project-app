@@ -45,3 +45,18 @@
 - **Test command:** Angular CLI test target `angular-project-app:test` with `--include=src/app/app.spec.ts`.
 - **Final output:** 1 test file passed; 16 tests passed. The runner emitted the existing Node `localStorage` ExperimentalWarning; no test failures.
 - **Full-suite verification:** Angular CLI target `angular-project-app:test` — 3 test files passed; 46 tests passed. The existing Node `localStorage` ExperimentalWarning was emitted.
+
+## Final-review fix wave: keyboard task movement and Gantt editing
+
+- **Finding:** Task reordering and Gantt bar movement/resizing were only available through pointer interactions.
+- **Fix:** Focused task rows now reorder among siblings with `Alt+ArrowUp/Down`; the existing UID-based store reorder moves a summary and its descendants as one subtree. Focused standard Gantt bars move their planned start by one calendar day with `ArrowLeft/Right` and change duration by one day with `Shift+ArrowLeft/Right`. Existing Enter/Space selection and pointer interactions are unchanged. Shortcut text and `aria-keyshortcuts` are exposed on applicable rows/bars. Nested controls do not trigger the row/bar shortcuts.
+- **Changed files:** `src/app/components/task-grid/task-grid.component.ts`, `src/app/components/gantt/gantt.component.ts`, `src/app/app.spec.ts`, `.superpowers/sdd/2026-11-06-projectflow-completion/task-5-report.md`.
+- **TDD RED command:** `ng test --include=src/app/app.spec.ts`
+  - Output: `src/app/app.spec.ts (18 tests | 2 failed)`; `Tests 2 failed | 16 passed`. Both new tests failed on the missing `aria-keyshortcuts` attributes before implementation.
+- **Focused GREEN command:** `ng test --include=src/app/app.spec.ts`
+  - Output: `Test Files 1 passed (1)`; `Tests 18 passed (18)`.
+- **Full-suite command:** `ng test`
+  - Output: `Test Files 3 passed (3)`; `Tests 48 passed (48)`.
+- **Production build command:** `ng build --configuration production`
+  - Output: `Application bundle generation complete.`; build succeeded. Angular reported the existing `exceljs` CommonJS optimization warning.
+- Test runs emitted the existing Node `localStorage` ExperimentalWarning.

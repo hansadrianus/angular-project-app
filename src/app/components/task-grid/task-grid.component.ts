@@ -39,6 +39,8 @@ interface EditingCell {
             tabindex="0"
             [attr.aria-label]="'Task: ' + t.name"
             [attr.aria-selected]="isSel"
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+            title="Reorder among sibling tasks with Alt+ArrowUp/Down"
             class="flex h-[28px] border-b border-slate-100 text-xs cursor-pointer transition-colors"
             [class.bg-slate-100]="isSum && !isSel"
             [class.font-semibold]="isSum"
@@ -298,11 +300,48 @@ export class TaskGridComponent {
   }
 
   onRowKeydown(event: KeyboardEvent, uid: number): void {
-    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) {
+    if (event.target !== event.currentTarget) return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.onRowClick(uid);
       return;
     }
+
+    if (
+      !event.altKey ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
+    ) {
+      return;
+    }
+
     event.preventDefault();
-    this.onRowClick(uid);
+    const tasks = this.allScheduledTasks();
+    const sourceIndex = tasks.findIndex((task) => task.uid === uid);
+    if (sourceIndex < 0) return;
+
+    const parentUid = this.getParentUid(tasks, sourceIndex);
+    const siblings = tasks.filter(
+      (task, index) =>
+        task.level === tasks[sourceIndex].level &&
+        this.getParentUid(tasks, index) === parentUid
+    );
+    const siblingIndex = siblings.findIndex((task) => task.uid === uid);
+    const target = siblings[siblingIndex + (event.key === 'ArrowUp' ? -1 : 1)];
+    if (target) {
+      this.store.reorderTasks(uid, target.uid, event.key === 'ArrowUp' ? 'before' : 'after');
+    }
+  }
+
+  private getParentUid(tasks: Task[], index: number): number | null {
+    const level = tasks[index].level;
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+      if (tasks[cursor].level < level) return tasks[cursor].uid;
+    }
+    return null;
   }
 
   toggleCollapse(event: Event, uid: number): void {
