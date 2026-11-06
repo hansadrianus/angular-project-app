@@ -154,7 +154,8 @@ export class ProjectStoreService {
     this.commitState((s) => {
       const tasks = [...s.tasks];
       const selId = this.selectedUid();
-      const selIdx = selId !== null ? tasks.findIndex((t) => t.uid === selId) : tasks.length - 1;
+      const selectedIndex = selId !== null ? tasks.findIndex((t) => t.uid === selId) : -1;
+      const selIdx = selectedIndex >= 0 ? selectedIndex : tasks.length - 1;
       const lvl = selIdx >= 0 && tasks[selIdx] ? tasks[selIdx].level : 0;
 
       const newTask: Task = {

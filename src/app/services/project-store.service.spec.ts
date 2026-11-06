@@ -374,6 +374,16 @@ describe('ProjectStoreService', () => {
     expect(service.selectedUid()).toBeDefined();
   });
 
+  it('appends a task after undo leaves the added task selected', () => {
+    const originalUids = service.state().tasks.map((task) => task.uid);
+
+    service.addTask();
+    service.undo();
+    service.addTask();
+
+    expect(service.state().tasks.map((task) => task.uid).slice(0, -1)).toEqual(originalUids);
+  });
+
   it('should delete a selected task and clear predecessors referencing it', () => {
     // Wireframes (uid 4) depends on Requirements (uid 3)
     service.selectTask(3);

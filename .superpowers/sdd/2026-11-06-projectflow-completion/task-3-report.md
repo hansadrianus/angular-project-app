@@ -46,3 +46,10 @@ The pre-existing changes in `docs/superpowers/specs/2026-11-06-projectflow-desig
 - **Fix:** UID sequence restoration now keeps the greater of its current high-water mark and the next UID implied by restored tasks, rather than lowering the sequence when a restore omits a previously used UID.
 - **TDD GREEN:** `npm.cmd test -- --watch=false --include=src/app/services/project-store.service.spec.ts` — 1 test file passed; 24 tests passed.
 - Test output included Node's existing experimental warning that localStorage is unavailable without `--localstorage-file`; the suite passed.
+
+## Review round 2 fix: adding after undo with stale selection
+
+- Added a regression test for adding a task, undoing it, then adding another task; the second task must be appended after the existing tasks.
+- **TDD RED:** Angular CLI MCP `run_target` for project `angular-project-app`, target `test`, options `watch=false` and `include=[src/app/services/project-store.service.spec.ts]` — 1 failed, 24 passed. The new task was inserted at index 0 because the selected UID no longer existed after undo.
+- **Fix:** `addTask()` now uses the last task as its insertion point when selection is null or references a missing task. A valid selected task continues to determine the insertion point and hierarchy level.
+- **TDD GREEN:** Re-ran the same focused Angular CLI test target — 1 test file passed; 25 tests passed. The runner emitted its existing benign localStorage warning.
