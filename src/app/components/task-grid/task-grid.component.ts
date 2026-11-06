@@ -13,19 +13,19 @@ interface EditingCell {
   selector: 'app-task-grid',
   template: `
     <div class="overflow-x-auto border-b-2 border-slate-300 select-none">
-      <div class="min-w-[920px]">
+      <div class="min-w-[920px]" role="table" aria-label="Project tasks">
         <!-- Table Header -->
-        <div class="flex h-[29px] bg-slate-100 font-semibold text-slate-600 text-xs border-b border-slate-300">
-          <div class="w-[38px] text-center p-1.5 shrink-0">ID</div>
-          <div class="w-[220px] p-1.5 shrink-0">Task Name</div>
-          <div class="w-[60px] p-1.5 shrink-0">Duration</div>
-          <div class="w-[84px] p-1.5 shrink-0">Plan Start</div>
-          <div class="w-[84px] p-1.5 shrink-0">Plan Finish</div>
-          <div class="w-[84px] p-1.5 shrink-0">Actual Start</div>
-          <div class="w-[84px] p-1.5 shrink-0">Actual End</div>
-          <div class="w-[70px] p-1.5 shrink-0">Pred.</div>
-          <div class="w-[80px] p-1.5 shrink-0">% Comp.</div>
-          <div class="w-[96px] p-1.5 shrink-0">Status</div>
+        <div role="row" class="flex h-[29px] bg-slate-100 font-semibold text-slate-600 text-xs border-b border-slate-300">
+          <div role="columnheader" class="w-[38px] text-center p-1.5 shrink-0">ID</div>
+          <div role="columnheader" class="w-[220px] p-1.5 shrink-0">Task Name</div>
+          <div role="columnheader" class="w-[60px] p-1.5 shrink-0">Duration</div>
+          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Plan Start</div>
+          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Plan Finish</div>
+          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Actual Start</div>
+          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Actual End</div>
+          <div role="columnheader" class="w-[70px] p-1.5 shrink-0">Pred.</div>
+          <div role="columnheader" class="w-[80px] p-1.5 shrink-0">% Comp.</div>
+          <div role="columnheader" class="w-[96px] p-1.5 shrink-0">Status</div>
         </div>
 
         <!-- Table Rows -->
@@ -35,6 +35,10 @@ interface EditingCell {
           @let status = getStatus(t, isSum);
 
           <div
+            role="row"
+            tabindex="0"
+            [attr.aria-label]="'Task: ' + t.name"
+            [attr.aria-selected]="isSel"
             class="flex h-[28px] border-b border-slate-100 text-xs cursor-pointer transition-colors"
             [class.bg-slate-100]="isSum && !isSel"
             [class.font-semibold]="isSum"
@@ -42,18 +46,20 @@ interface EditingCell {
             [class.bg-blue-200]="isSel && isSum"
             [class.hover:bg-slate-50]="!isSel"
             (click)="onRowClick(t.uid)"
+            (keydown)="onRowKeydown($event, t.uid)"
             draggable="true"
             (dragstart)="onDragStart($event, t.uid)"
             (dragover)="onDragOver($event)"
             (drop)="onDrop($event, t.uid)"
           >
             <!-- ID / Drag handle -->
-            <div class="w-[38px] text-center p-1.5 shrink-0 text-slate-400 cursor-grab">
+            <div role="cell" class="w-[38px] text-center p-1.5 shrink-0 text-slate-400 cursor-grab">
               ⠿ {{ getRowNumber(t.uid) }}
             </div>
 
             <!-- Task Name -->
             <div
+              role="cell"
               class="w-[220px] p-1.5 shrink-0 flex items-center overflow-hidden"
               [style.padding-left.px]="6 + t.level * 16"
               (dblclick)="startEdit(t, 'name')"
@@ -61,6 +67,8 @@ interface EditingCell {
               @if (isSum) {
                 <button
                   type="button"
+                  [attr.aria-label]="(t.collapsed ? 'Expand ' : 'Collapse ') + t.name"
+                  [attr.aria-expanded]="!t.collapsed"
                   class="w-4 h-4 mr-1 text-slate-500 hover:text-slate-800 flex items-center justify-center shrink-0"
                   (click)="toggleCollapse($event, t.uid)"
                 >
@@ -87,7 +95,7 @@ interface EditingCell {
             </div>
 
             <!-- Duration -->
-            <div class="w-[60px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'dur')">
+            <div role="cell" class="w-[60px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'dur')">
               @if (isEditing(t.uid, 'dur')) {
                 <input
                   #durInput
@@ -106,7 +114,7 @@ interface EditingCell {
             </div>
 
             <!-- Plan Start -->
-            <div class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'start')">
+            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'start')">
               @if (isEditing(t.uid, 'start')) {
                 <input
                   #startInputEl
@@ -124,12 +132,12 @@ interface EditingCell {
             </div>
 
             <!-- Plan Finish -->
-            <div class="w-[84px] p-1.5 shrink-0 text-slate-700">
+            <div role="cell" class="w-[84px] p-1.5 shrink-0 text-slate-700">
               {{ formatShortDate(t.finish) }}
             </div>
 
             <!-- Actual Start -->
-            <div class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualStart')">
+            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualStart')">
               @if (isEditing(t.uid, 'actualStart')) {
                 <input
                   #actStartInput
@@ -147,7 +155,7 @@ interface EditingCell {
             </div>
 
             <!-- Actual End -->
-            <div class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualEnd')">
+            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualEnd')">
               @if (isEditing(t.uid, 'actualEnd')) {
                 <input
                   #actEndInput
@@ -165,7 +173,7 @@ interface EditingCell {
             </div>
 
             <!-- Predecessors -->
-            <div class="w-[70px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'preds')">
+            <div role="cell" class="w-[70px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'preds')">
               @if (isEditing(t.uid, 'preds')) {
                 <input
                   #predInput
@@ -183,7 +191,7 @@ interface EditingCell {
             </div>
 
             <!-- % Complete -->
-            <div class="w-[80px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'prog')">
+            <div role="cell" class="w-[80px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'prog')">
               @if (isEditing(t.uid, 'prog')) {
                 <input
                   #progInput
@@ -208,9 +216,10 @@ interface EditingCell {
             </div>
 
             <!-- Status -->
-            <div class="w-[96px] p-1 shrink-0 flex items-center">
+            <div role="cell" class="w-[96px] p-1 shrink-0 flex items-center">
               @if (status) {
                 <span
+                  [attr.aria-label]="'Status: ' + status"
                   class="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   [class.bg-green-100]="status === 'Done'"
                   [class.text-green-800]="status === 'Done'"
@@ -286,6 +295,14 @@ export class TaskGridComponent {
       return;
     }
     this.store.selectTask(uid);
+  }
+
+  onRowKeydown(event: KeyboardEvent, uid: number): void {
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) {
+      return;
+    }
+    event.preventDefault();
+    this.onRowClick(uid);
   }
 
   toggleCollapse(event: Event, uid: number): void {

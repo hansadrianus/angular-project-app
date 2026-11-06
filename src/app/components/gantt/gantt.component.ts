@@ -80,6 +80,9 @@ interface DepArrow {
           <div class="flex h-[34px] bg-slate-50">
             @for (d of dayHeaders(); track d.dateStr) {
               <div
+                role="button"
+                tabindex="0"
+                [attr.aria-label]="getDayAccessibleLabel(d)"
                 class="flex flex-col items-center justify-center border-r border-slate-200 py-0.5 cursor-pointer transition-colors"
                 [style.width.px]="dayW()"
                 [class.bg-slate-200]="d.type === 'weekend'"
@@ -95,6 +98,7 @@ interface DepArrow {
                 [class.ring-inset]="d.isToday"
                 [attr.title]="d.dateStr + ' (' + d.name + ') — Click to mark/unmark Holiday or Weekend'"
                 (click)="openDayPopover($event, d.dateStr)"
+                (keydown)="onDayHeaderKeydown($event, d.dateStr)"
               >
                 <span class="text-[10px] font-bold tracking-tight whitespace-nowrap leading-tight">
                   {{ d.calDate }}
@@ -117,6 +121,7 @@ interface DepArrow {
           <!-- Vertical Day Columns (Stripes & Subtle Dates) -->
           @for (d of dayHeaders(); track d.dateStr; let idx = $index) {
             <div
+              aria-hidden="true"
               class="absolute top-0 bottom-0 cursor-pointer pointer-events-auto border-r transition-colors"
               [style.left.px]="idx * dayW()"
               [style.width.px]="dayW()"
@@ -199,12 +204,16 @@ interface DepArrow {
                 @let sW = Math.max(getX(t.finish!) + dayW() - sX, 12);
 
                 <div
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-label]="getTaskBarAccessibleLabel(t)"
                   class="absolute h-[12px] bg-slate-700 z-10 cursor-pointer"
                   [style.left.px]="sX"
                   [style.top.px]="y + 1"
                   [style.width.px]="sW"
                   style="clip-path: polygon(0 0, 100% 0, 100% 60%, calc(100% - 6px) 100%, calc(100% - 6px) 60%, 6px 60%, 6px 100%, 0 60%);"
                   (click)="onTaskBarClick($event, t.uid)"
+                  (keydown)="onTaskBarKeydown($event, t.uid)"
                 ></div>
               }
               <!-- Milestone diamond -->
@@ -212,10 +221,14 @@ interface DepArrow {
                 @let mX = getX(t.start) + 2;
 
                 <div
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-label]="getTaskBarAccessibleLabel(t)"
                   class="absolute w-[12px] h-[12px] bg-slate-900 rotate-45 z-10 cursor-pointer"
                   [style.left.px]="mX"
                   [style.top.px]="y"
                   (click)="onTaskBarClick($event, t.uid)"
+                  (keydown)="onTaskBarKeydown($event, t.uid)"
                 ></div>
               }
               <!-- Standard plan bar -->
@@ -224,6 +237,9 @@ interface DepArrow {
                 @let bW = getX(t.finish!) + dayW() - bX;
 
                 <div
+                  role="button"
+                  tabindex="0"
+                  [attr.aria-label]="getTaskBarAccessibleLabel(t)"
                   class="absolute h-[14px] rounded z-10 cursor-grab flex overflow-hidden shadow-sm"
                   [style.left.px]="bX"
                   [style.top.px]="y"
@@ -233,6 +249,7 @@ interface DepArrow {
                   [class.ring-2]="isSel"
                   [class.ring-blue-400]="isSel"
                   (mousedown)="onBarMouseDown($event, t)"
+                  (keydown)="onTaskBarKeydown($event, t.uid)"
                 >
                   <!-- Progress Fill -->
                   <div
@@ -259,6 +276,7 @@ interface DepArrow {
 
           <!-- SVG Dependency Arrows -->
           <svg
+            aria-hidden="true"
             class="absolute inset-0 pointer-events-none z-10"
             [style.width.px]="totalWidth()"
             [style.height.px]="bodyHeight()"
@@ -293,6 +311,7 @@ interface DepArrow {
             </div>
             <button
               type="button"
+              aria-label="Close calendar editor"
               class="text-slate-400 hover:text-slate-600 font-bold px-1"
               (click)="closeDayPopover()"
             >
@@ -337,6 +356,7 @@ interface DepArrow {
               <div class="flex gap-1">
                 <input
                   #holNameInput
+                  aria-label="Holiday name (optional)"
                   type="text"
                   placeholder="Holiday name (optional)"
                   [value]="p.holidayNameInput"
@@ -345,6 +365,7 @@ interface DepArrow {
                 />
                 <button
                   type="button"
+                  aria-label="Add Holiday"
                   class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium shrink-0"
                   (click)="addHoliday(p.dateStr)"
                 >
@@ -548,6 +569,47 @@ export class GanttComponent {
     const tasks = this.allScheduledTasks();
     const idx = tasks.findIndex((t) => t.uid === uid);
     return idx >= 0 && this.store.isSummaryIndex(tasks, idx);
+  }
+
+  getDayAccessibleLabel(day: DayColumnHeader): string {
+    const date = s2d(day.dateStr).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    return `${day.dateStr}, ${date}: ${day.name}. Activate to edit day availability.`;
+  }
+
+  onDayHeaderKeydown(event: KeyboardEvent, dateStr: string): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.popover.set({
+      dateStr,
+      x: Math.min(bounds.left, window.innerWidth - 290),
+      y: Math.min(bounds.bottom + 10, window.innerHeight - 240),
+      holidayNameInput: ''
+    });
+  }
+
+  getTaskBarAccessibleLabel(task: Task): string {
+    const start = task.start ? d2s(task.start) : 'unscheduled';
+    const finish = task.finish ? d2s(task.finish) : start;
+    return `Task bar: ${task.name}, starts ${start}, finishes ${finish}`;
+  }
+
+  onTaskBarKeydown(event: KeyboardEvent, uid: number): void {
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) {
+      return;
+    }
+    event.preventDefault();
+    if (this.store.linkMode()) {
+      this.store.handleLinkTask(uid);
+      return;
+    }
+    this.store.selectTask(uid);
   }
 
   getX(d: Date): number {

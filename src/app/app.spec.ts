@@ -1,6 +1,41 @@
 import { TestBed } from '@angular/core/testing';
+import type { Task } from './models/project.model';
 import { App } from './app';
 import { ProjectStoreService } from './services/project-store.service';
+import { d2s } from './utils/date-utils';
+
+const createTask = (
+  uid: number,
+  name: string,
+  level: number,
+  dur: number,
+  prog = 0
+): Task => ({
+  uid,
+  name,
+  dur,
+  level,
+  preds: [],
+  prog,
+  startInput: null,
+  actualStart: null,
+  actualEnd: null,
+  collapsed: false,
+  start: null,
+  finish: null
+});
+
+const setProject = (store: ProjectStoreService, tasks: Task[]): void => {
+  store.state.update((state) => ({
+    ...state,
+    projectStart: '2026-10-05',
+    holidays: [],
+    weekendDays: [0, 6],
+    workingDays: [],
+    customNonWork: [],
+    tasks
+  }));
+};
 
 describe('App', () => {
   beforeEach(async () => {
@@ -61,6 +96,191 @@ describe('App', () => {
     expect(redoButton.disabled).toBe(false);
   });
 
+  it('keeps toolbar controls in keyboard focus order', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const buttons = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('header button')
+    );
+    const labels = buttons.map((button) =>
+      (button.getAttribute('aria-label') ?? button.textContent ?? '').trim().replace(/\s+/g, ' ')
+    );
+
+    expect(labels.slice(0, 7)).toEqual([
+      '+ Task',
+      '🗑 Delete',
+      '🔗 Link',
+      '⇥ Indent',
+      '⇤ Outdent',
+      'Undo',
+      'Redo'
+    ]);
+    expect(buttons.every((button) => button.tabIndex >= 0)).toBe(true);
+    fixture.destroy();
+  });
+
+  it('expands and collapses a summary with an accessible keyboard-operable control', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Summary', 0, 0), createTask(2, 'Child', 1, 1)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const collapseButton = compiled.querySelector(
+      'button[aria-label="Collapse Summary"]'
+    ) as HTMLButtonElement;
+    expect(collapseButton).toBeTruthy();
+    if (!collapseButton) return;
+    expect(collapseButton.type).toBe('button');
+    expect(collapseButton.getAttribute('aria-expanded')).toBe('true');
+    expect(compiled.querySelector('[aria-label="Task: Child"]')).toBeTruthy();
+
+    collapseButton.focus();
+    collapseButton.click();
+    fixture.detectChanges();
+
+    const expandButton = compiled.querySelector(
+      'button[aria-label="Expand Summary"]'
+    ) as HTMLButtonElement;
+    expect(expandButton.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('[aria-label="Task: Child"]')).toBeNull();
+    fixture.destroy();
+  });
+
+  it('exposes task status labels to assistive technology', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Completed task', 0, 1, 100)]);
+    fixture.detectChanges();
+
+    const status = (fixture.nativeElement as HTMLElement).querySelector(
+      '[aria-label="Status: Done"]'
+    );
+    expect(status?.textContent?.trim()).toBe('Done');
+    fixture.destroy();
+  });
+
+  it('activates a focused task row with Enter and Space', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Keyboard task', 0, 1)]);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector(
+      '[role="row"][aria-label="Task: Keyboard task"]'
+    ) as HTMLElement;
+    expect(row).toBeTruthy();
+    if (!row) return;
+    expect(row.tabIndex).toBe(0);
+
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(store.selectedUid()).toBe(1);
+
+    store.selectTask(null);
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(store.selectedUid()).toBe(1);
+    fixture.destroy();
+  });
+
+  it('moves a summary and its descendants together through the task grid', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [
+      createTask(1, 'Summary', 0, 0),
+      createTask(2, 'Child', 1, 1),
+      createTask(3, 'Destination', 0, 1)
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const summaryRow = compiled.querySelector(
+      '[role="row"][aria-label="Task: Summary"]'
+    ) as HTMLElement;
+    const destinationRow = compiled.querySelector(
+      '[role="row"][aria-label="Task: Destination"]'
+    ) as HTMLElement;
+    expect(summaryRow).toBeTruthy();
+    expect(destinationRow).toBeTruthy();
+    if (!summaryRow || !destinationRow) return;
+    vi.spyOn(destinationRow, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 100,
+      bottom: 28,
+      left: 0,
+      width: 100,
+      height: 28,
+      toJSON: () => ({})
+    });
+
+    summaryRow.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(dropEvent, 'clientY', { value: 28 });
+    destinationRow.dispatchEvent(dropEvent);
+
+    expect(store.state().tasks.map((task) => task.uid)).toEqual([3, 1, 2]);
+    expect(store.state().tasks.map((task) => task.level)).toEqual([0, 0, 1]);
+    fixture.destroy();
+  });
+
+  it('preserves holiday-driven schedule changes through undo and redo', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Delivery', 0, 3)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const originalFinish = d2s(store.scheduledTasks()[0].finish!);
+    expect(originalFinish).toBe('2026-10-07');
+
+    const holidayDate = compiled.querySelector(
+      '[aria-label^="2026-10-06"]'
+    ) as HTMLElement;
+    expect(holidayDate).toBeTruthy();
+    if (!holidayDate) return;
+    holidayDate.click();
+    fixture.detectChanges();
+
+    const holidayName = compiled.querySelector(
+      'input[placeholder="Holiday name (optional)"]'
+    ) as HTMLInputElement;
+    holidayName.value = 'Delivery blackout';
+    holidayName.dispatchEvent(new Event('input', { bubbles: true }));
+    compiled.querySelector('button[aria-label="Add Holiday"]')?.dispatchEvent(
+      new Event('click', { bubbles: true })
+    );
+    fixture.detectChanges();
+
+    const holidayFinish = d2s(store.scheduledTasks()[0].finish!);
+    expect(holidayFinish).toBe('2026-10-08');
+
+    (compiled.querySelector('button[aria-label="Undo"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(d2s(store.scheduledTasks()[0].finish!)).toBe(originalFinish);
+
+    (compiled.querySelector('button[aria-label="Redo"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(d2s(store.scheduledTasks()[0].finish!)).toBe(holidayFinish);
+    fixture.destroy();
+  });
+
+  it('provides accessible labels for Gantt dates and task bars', () => {
+    const fixture = TestBed.createComponent(App);
+    const store = TestBed.inject(ProjectStoreService);
+    setProject(store, [createTask(1, 'Accessible task', 0, 2)]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('[aria-label^="2026-10-05"]')).toBeTruthy();
+    expect(
+      compiled.querySelector('[aria-label="Task bar: Accessible task, starts 2026-10-05, finishes 2026-10-06"]')
+    ).toBeTruthy();
+    fixture.destroy();
+  });
+
   it('dispatches undo and redo keyboard shortcuts through the store', () => {
     const fixture = TestBed.createComponent(App);
     const store = TestBed.inject(ProjectStoreService);
@@ -80,14 +300,34 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const store = TestBed.inject(ProjectStoreService);
     const undoSpy = vi.spyOn(store, 'undo');
-    const input = document.createElement('input');
-    document.body.append(input);
-    input.focus();
+    const redoSpy = vi.spyOn(store, 'redo');
+    fixture.detectChanges();
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    const editable = document.createElement('div');
+    editable.contentEditable = 'true';
+    Object.defineProperty(editable, 'isContentEditable', { value: true });
+    for (const element of [document.createElement('input'), document.createElement('textarea'), editable]) {
+      document.body.append(element);
+      element.focus();
+      for (const keyEvent of [
+        { key: 'z', shiftKey: false },
+        { key: 'z', shiftKey: true },
+        { key: 'y', shiftKey: false }
+      ]) {
+        element.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: keyEvent.key,
+            ctrlKey: true,
+            shiftKey: keyEvent.shiftKey,
+            bubbles: true
+          })
+        );
+      }
+      element.remove();
+    }
 
     expect(undoSpy).not.toHaveBeenCalled();
-    input.remove();
+    expect(redoSpy).not.toHaveBeenCalled();
     fixture.destroy();
   });
 });
