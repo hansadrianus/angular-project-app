@@ -3,6 +3,7 @@ import type { Task } from './models/project.model';
 import { App } from './app';
 import { ProjectStoreService } from './services/project-store.service';
 import { CaptureService } from './services/capture.service';
+import { ExcelService } from './services/excel.service';
 import { d2s } from './utils/date-utils';
 
 const onePixelPng =
@@ -185,6 +186,71 @@ describe('App', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(exportButton.disabled).toBe(false);
+    fixture.destroy();
+  });
+
+  it('prevents image capture while an Excel export is pending', async () => {
+    const fixture = TestBed.createComponent(App);
+    let finishExcelExport!: () => void;
+    vi.spyOn(TestBed.inject(ExcelService), 'exportProject').mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishExcelExport = resolve;
+      })
+    );
+    const capture = vi.spyOn(TestBed.inject(CaptureService), 'captureElement');
+    fixture.detectChanges();
+
+    const app = fixture.componentInstance;
+    const compiled = fixture.nativeElement as HTMLElement;
+    const imageButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement;
+    const excelButton = Array.from(compiled.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Export to Excel')
+    ) as HTMLButtonElement;
+
+    void app.onExport();
+    fixture.detectChanges();
+    expect(imageButton.disabled).toBe(true);
+    await app.onExportGanttImage();
+    expect(capture).not.toHaveBeenCalled();
+
+    finishExcelExport();
+    await fixture.whenStable();
+    fixture.destroy();
+  });
+
+  it('prevents Excel export while image capture is pending', async () => {
+    const fixture = TestBed.createComponent(App);
+    let finishImageCapture!: (dataUrl: string) => void;
+    const exportProject = vi.spyOn(TestBed.inject(ExcelService), 'exportProject');
+    vi.spyOn(TestBed.inject(CaptureService), 'captureElement').mockReturnValue(
+      new Promise<string>((resolve) => {
+        finishImageCapture = resolve;
+      })
+    );
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    fixture.detectChanges();
+
+    const app = fixture.componentInstance;
+    const compiled = fixture.nativeElement as HTMLElement;
+    const imageButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement;
+    const excelButton = Array.from(compiled.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Export to Excel')
+    ) as HTMLButtonElement;
+
+    void app.onExportGanttImage();
+    fixture.detectChanges();
+    expect(excelButton.disabled).toBe(true);
+    await app.onExport();
+    expect(exportProject).not.toHaveBeenCalled();
+
+    finishImageCapture(onePixelPng);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(imageButton.disabled).toBe(false);
     fixture.destroy();
   });
 

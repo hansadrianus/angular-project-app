@@ -28,7 +28,7 @@ export class App {
   readonly importFileInput = viewChild<ElementRef<HTMLInputElement>>('importFileInput');
 
   readonly isGanttImageExporting = signal(false);
-  isExporting = false;
+  readonly isExcelExporting = signal(false);
 
   onAddTask(): void {
     this.store.addTask();
@@ -140,8 +140,8 @@ export class App {
   }
 
   async onExport(): Promise<void> {
-    if (this.isExporting) return;
-    this.isExporting = true;
+    if (this.isExcelExporting() || this.isGanttImageExporting()) return;
+    this.isExcelExporting.set(true);
     try {
       const ganttElem = this.ganttRef()?.ganttCaptureElement()?.nativeElement;
       await this.excelService.exportProject(
@@ -153,12 +153,12 @@ export class App {
       const message = err instanceof Error ? err.message : String(err);
       alert(`Export error: ${message}`);
     } finally {
-      this.isExporting = false;
+      this.isExcelExporting.set(false);
     }
   }
 
   async onExportGanttImage(): Promise<void> {
-    if (this.isGanttImageExporting()) return;
+    if (this.isGanttImageExporting() || this.isExcelExporting()) return;
     this.isGanttImageExporting.set(true);
 
     try {

@@ -134,7 +134,7 @@
         type="button"
         aria-label="Export Gantt PNG"
         class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
-        [disabled]="isGanttImageExporting()"
+        [disabled]="isGanttImageExporting() || isExcelExporting()"
         (click)="onExportGanttImage()"
       >
         <span>🖼</span>
@@ -142,12 +142,12 @@
       </button>
       <button
         type="button"
-        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold shadow-sm transition-colors flex items-center gap-1"
-        [disabled]="isExporting"
+        class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+        [disabled]="isExcelExporting() || isGanttImageExporting()"
         (click)="onExport()"
       >
         <span>⬇</span>
-        <span>{{ isExporting ? 'Exporting...' : 'Export to Excel' }}</span>
+        <span>{{ isExcelExporting() ? 'Exporting...' : 'Export to Excel' }}</span>
       </button>
 
       <!-- Hidden file input for Excel/CSV import -->

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { Task } from '../../models/project.model';
 import { ProjectStoreService } from '../../services/project-store.service';
 import { d2s, fmt, s2d, taskStatus } from '../../utils/date-utils';
@@ -9,23 +9,45 @@ interface EditingCell {
   value: string;
 }
 
+interface ColumnResizeState {
+  boundaryIndex: number;
+  startX: number;
+  startWidths: number[];
+}
+
 @Component({
   selector: 'app-task-grid',
   template: `
-    <div class="overflow-x-auto border-b-2 border-slate-300 select-none">
-      <div class="min-w-[920px]" role="table" aria-label="Project tasks">
+    <div class="overflow-x-auto border-b-2 border-r border-slate-300 select-none">
+      <div #taskTable class="w-full min-w-[920px]" role="table" aria-label="Project tasks">
         <!-- Table Header -->
-        <div role="row" class="flex h-[29px] bg-slate-100 font-semibold text-slate-600 text-xs border-b border-slate-300">
-          <div role="columnheader" class="w-[38px] text-center p-1.5 shrink-0">ID</div>
-          <div role="columnheader" class="w-[220px] p-1.5 shrink-0">Task Name</div>
-          <div role="columnheader" class="w-[60px] p-1.5 shrink-0">Duration</div>
-          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Plan Start</div>
-          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Plan Finish</div>
-          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Actual Start</div>
-          <div role="columnheader" class="w-[84px] p-1.5 shrink-0">Actual End</div>
-          <div role="columnheader" class="w-[70px] p-1.5 shrink-0">Pred.</div>
-          <div role="columnheader" class="w-[80px] p-1.5 shrink-0">% Comp.</div>
-          <div role="columnheader" class="w-[96px] p-1.5 shrink-0">Status</div>
+        <div
+          role="row"
+          class="grid w-full h-[29px] bg-slate-100 font-semibold text-slate-600 text-xs border-b border-slate-300"
+          [style.grid-template-columns]="columnTemplate()"
+        >
+          @for (column of columnLabels; track column; let i = $index) {
+            <div role="columnheader" class="relative min-w-0 overflow-visible p-1.5">
+              <span class="block min-w-0 truncate pr-2">{{ column }}</span>
+              @if (i < columnLabels.length - 1) {
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  tabindex="0"
+                  [attr.aria-label]="'Resize ' + column + ' and ' + columnLabels[i + 1] + ' columns'"
+                  [attr.aria-valuenow]="getBoundaryValue(i)"
+                  [attr.aria-valuemin]="getBoundaryMinimum(i)"
+                  [attr.aria-valuemax]="getBoundaryMaximum(i)"
+                  class="absolute top-0 right-0 z-10 h-full w-6 translate-x-1/2 cursor-col-resize touch-none border-r border-slate-300 hover:border-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                  (pointerdown)="onColumnResizePointerDown($event, i)"
+                  (pointermove)="onColumnResizePointerMove($event)"
+                  (pointerup)="onColumnResizePointerUp()"
+                  (pointercancel)="onColumnResizePointerUp()"
+                  (keydown)="onColumnResizeKeydown($event, i)"
+                ></div>
+              }
+            </div>
+          }
         </div>
 
         <!-- Table Rows -->
@@ -41,7 +63,8 @@ interface EditingCell {
             [attr.aria-selected]="isSel"
             aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             title="Reorder among sibling tasks with Alt+ArrowUp/Down"
-            class="flex h-[28px] border-b border-slate-100 text-xs cursor-pointer transition-colors"
+            class="grid w-full h-[28px] border-b border-slate-100 text-xs cursor-pointer transition-colors"
+            [style.grid-template-columns]="columnTemplate()"
             [class.bg-slate-100]="isSum && !isSel"
             [class.font-semibold]="isSum"
             [class.bg-blue-100]="isSel && !isSum"
@@ -55,14 +78,14 @@ interface EditingCell {
             (drop)="onDrop($event, t.uid)"
           >
             <!-- ID / Drag handle -->
-            <div role="cell" class="w-[38px] text-center p-1.5 shrink-0 text-slate-400 cursor-grab">
+            <div role="cell" class="min-w-0 truncate text-center p-1.5 text-slate-400 cursor-grab">
               ⠿ {{ getRowNumber(t.uid) }}
             </div>
 
             <!-- Task Name -->
             <div
               role="cell"
-              class="w-[220px] p-1.5 shrink-0 flex items-center overflow-hidden"
+              class="min-w-0 p-1.5 flex items-center overflow-hidden"
               [style.padding-left.px]="6 + t.level * 16"
               (dblclick)="startEdit(t, 'name')"
             >
@@ -97,7 +120,7 @@ interface EditingCell {
             </div>
 
             <!-- Duration -->
-            <div role="cell" class="w-[60px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'dur')">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5" (click)="!isSum && startEdit(t, 'dur')">
               @if (isEditing(t.uid, 'dur')) {
                 <input
                   #durInput
@@ -116,7 +139,7 @@ interface EditingCell {
             </div>
 
             <!-- Plan Start -->
-            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'start')">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5" (click)="!isSum && startEdit(t, 'start')">
               @if (isEditing(t.uid, 'start')) {
                 <input
                   #startInputEl
@@ -134,12 +157,12 @@ interface EditingCell {
             </div>
 
             <!-- Plan Finish -->
-            <div role="cell" class="w-[84px] p-1.5 shrink-0 text-slate-700">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5 text-slate-700">
               {{ formatShortDate(t.finish) }}
             </div>
 
             <!-- Actual Start -->
-            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualStart')">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5" (click)="!isSum && startEdit(t, 'actualStart')">
               @if (isEditing(t.uid, 'actualStart')) {
                 <input
                   #actStartInput
@@ -157,7 +180,7 @@ interface EditingCell {
             </div>
 
             <!-- Actual End -->
-            <div role="cell" class="w-[84px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'actualEnd')">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5" (click)="!isSum && startEdit(t, 'actualEnd')">
               @if (isEditing(t.uid, 'actualEnd')) {
                 <input
                   #actEndInput
@@ -175,7 +198,7 @@ interface EditingCell {
             </div>
 
             <!-- Predecessors -->
-            <div role="cell" class="w-[70px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'preds')">
+            <div role="cell" class="min-w-0 overflow-hidden whitespace-nowrap p-1.5" (click)="!isSum && startEdit(t, 'preds')">
               @if (isEditing(t.uid, 'preds')) {
                 <input
                   #predInput
@@ -193,7 +216,7 @@ interface EditingCell {
             </div>
 
             <!-- % Complete -->
-            <div role="cell" class="w-[80px] p-1.5 shrink-0" (click)="!isSum && startEdit(t, 'prog')">
+            <div role="cell" class="min-w-0 p-1.5" (click)="!isSum && startEdit(t, 'prog')">
               @if (isEditing(t.uid, 'prog')) {
                 <input
                   #progInput
@@ -218,7 +241,7 @@ interface EditingCell {
             </div>
 
             <!-- Status -->
-            <div role="cell" class="w-[96px] p-1 shrink-0 flex items-center">
+            <div role="cell" class="min-w-0 overflow-hidden p-1 flex items-center">
               @if (status) {
                 <span
                   [attr.aria-label]="'Status: ' + status"
@@ -244,18 +267,129 @@ interface EditingCell {
 })
 export class TaskGridComponent {
   readonly store = inject(ProjectStoreService);
+  readonly taskTable = viewChild<ElementRef<HTMLElement>>('taskTable');
 
   readonly visibleTasks = this.store.visibleTasks;
   readonly allScheduledTasks = this.store.scheduledTasks;
+  readonly columnLabels = [
+    'ID',
+    'Task Name',
+    'Duration',
+    'Plan Start',
+    'Plan Finish',
+    'Actual Start',
+    'Actual End',
+    'Pred.',
+    '% Comp.',
+    'Status'
+  ];
+  readonly columnWidths = signal([38, 220, 60, 84, 84, 84, 84, 70, 80]);
+  readonly columnTemplate = computed(() => {
+    const widths = this.columnWidths();
+    return [...widths.map((width) => `${width}px`), `minmax(${this.minimumStatusWidth}px, 1fr)`].join(
+      ' '
+    );
+  });
 
   readonly editing = signal<EditingCell | null>(null);
   private dragSourceUid: number | null = null;
+  private readonly columnMinimumWidths = [38, 140, 52, 72, 72, 72, 72, 54, 68];
+  private readonly minimumStatusWidth = 80;
+  private columnResize: ColumnResizeState | null = null;
 
   private readonly today = computed(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   });
+
+  getBoundaryValue(index: number): number {
+    return this.columnWidths()
+      .slice(0, index + 1)
+      .reduce((total, width) => total + width, 0);
+  }
+
+  getBoundaryMinimum(index: number): number {
+    const widths = this.columnWidths();
+    return (
+      widths.slice(0, index).reduce((total, width) => total + width, 0) +
+      this.columnMinimumWidths[index]
+    );
+  }
+
+  getBoundaryMaximum(index: number): number {
+    const widths = this.columnWidths();
+    if (index === widths.length - 1) {
+      return this.getTableWidth() - this.minimumStatusWidth;
+    }
+
+    return (
+      widths.slice(0, index).reduce((total, width) => total + width, 0) +
+      widths[index] +
+      widths[index + 1] -
+      this.columnMinimumWidths[index + 1]
+    );
+  }
+
+  onColumnResizePointerDown(event: PointerEvent, boundaryIndex: number): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    this.columnResize = {
+      boundaryIndex,
+      startX: event.clientX,
+      startWidths: [...this.columnWidths()]
+    };
+
+    const separator = event.currentTarget as HTMLElement;
+    if (typeof separator.setPointerCapture === 'function') {
+      separator.setPointerCapture(event.pointerId);
+    }
+  }
+
+  onColumnResizePointerMove(event: PointerEvent): void {
+    if (!this.columnResize) return;
+    this.resizeBoundary(
+      this.columnResize.boundaryIndex,
+      this.columnResize.startWidths,
+      event.clientX - this.columnResize.startX
+    );
+  }
+
+  onColumnResizePointerUp(): void {
+    this.columnResize = null;
+  }
+
+  onColumnResizeKeydown(event: KeyboardEvent, boundaryIndex: number): void {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const delta = event.key === 'ArrowRight' ? 8 : -8;
+    this.resizeBoundary(boundaryIndex, this.columnWidths(), delta);
+  }
+
+  private resizeBoundary(boundaryIndex: number, startWidths: number[], delta: number): void {
+    const isFinalBoundary = boundaryIndex === startWidths.length - 1;
+    const leftMinimum = this.columnMinimumWidths[boundaryIndex];
+    const minimumDelta = leftMinimum - startWidths[boundaryIndex];
+    const maximumDelta = isFinalBoundary
+      ? Math.max(
+          0,
+          this.getTableWidth() -
+            startWidths.reduce((total, width) => total + width, 0) -
+            this.minimumStatusWidth
+        )
+      : startWidths[boundaryIndex + 1] - this.columnMinimumWidths[boundaryIndex + 1];
+    const appliedDelta = Math.max(minimumDelta, Math.min(delta, maximumDelta));
+    const nextWidths = [...startWidths];
+    nextWidths[boundaryIndex] += appliedDelta;
+    if (!isFinalBoundary) {
+      nextWidths[boundaryIndex + 1] -= appliedDelta;
+    }
+    this.columnWidths.set(nextWidths);
+  }
+
+  private getTableWidth(): number {
+    return Math.max(this.taskTable()?.nativeElement.clientWidth ?? 0, 920);
+  }
 
   isSummary(uid: number): boolean {
     const tasks = this.allScheduledTasks();
