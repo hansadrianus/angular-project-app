@@ -38,6 +38,25 @@ describe('TaskGridComponent column resizing', () => {
     fixture.destroy();
   });
 
+  it('centers the visible divider inside the resize hit area', () => {
+    const fixture = TestBed.createComponent(TaskGridComponent);
+    fixture.detectChanges();
+
+    const separator = fixture.nativeElement.querySelector(
+      '[role="separator"][aria-label="Resize ID and Task Name columns"]'
+    ) as HTMLElement;
+    const visibleDivider = separator.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+
+    expect(separator.classList.contains('w-6')).toBe(true);
+    expect(separator.classList.contains('translate-x-1/2')).toBe(true);
+    expect(separator.classList.contains('border-r')).toBe(false);
+    expect(visibleDivider).toBeTruthy();
+    expect(visibleDivider?.classList.contains('left-1/2')).toBe(true);
+    expect(visibleDivider?.classList.contains('border-l')).toBe(true);
+    expect(visibleDivider?.classList.contains('pointer-events-none')).toBe(true);
+    fixture.destroy();
+  });
+
   it('resizes adjacent columns with the pointer and clamps them to their minimums', () => {
     const fixture = TestBed.createComponent(TaskGridComponent);
     fixture.detectChanges();

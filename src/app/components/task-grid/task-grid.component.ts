@@ -38,13 +38,18 @@ interface ColumnResizeState {
                   [attr.aria-valuenow]="getBoundaryValue(i)"
                   [attr.aria-valuemin]="getBoundaryMinimum(i)"
                   [attr.aria-valuemax]="getBoundaryMaximum(i)"
-                  class="absolute top-0 right-0 z-10 h-full w-6 translate-x-1/2 cursor-col-resize touch-none border-r border-slate-300 hover:border-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                  class="group absolute top-0 right-0 z-10 h-full w-6 translate-x-1/2 cursor-col-resize touch-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
                   (pointerdown)="onColumnResizePointerDown($event, i)"
                   (pointermove)="onColumnResizePointerMove($event)"
                   (pointerup)="onColumnResizePointerUp()"
                   (pointercancel)="onColumnResizePointerUp()"
                   (keydown)="onColumnResizeKeydown($event, i)"
-                ></div>
+                >
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 left-1/2 border-l border-slate-300 group-hover:border-blue-500"
+                  ></span>
+                </div>
               }
             </div>
           }
