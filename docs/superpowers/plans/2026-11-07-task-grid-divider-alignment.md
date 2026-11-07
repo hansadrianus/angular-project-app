@@ -58,7 +58,7 @@ Expected: All task-grid tests pass, including the new divider-alignment test.
 
 Run the full test suite and production build. In the browser, check the header at default and minimum adjacent widths. Confirm the capture target is only the Gantt chart, then export a PNG and verify the download still succeeds.
 
-- [ ] **Step 6: Commit the verified changes**
+- [x] **Step 6: Commit the verified changes**
 
 ```bash
 git add src/app/components/task-grid/task-grid.component.ts src/app/components/task-grid/task-grid.component.spec.ts docs/superpowers/specs/2026-11-07-task-grid-divider-alignment-design.md docs/superpowers/plans/2026-11-07-task-grid-divider-alignment.md
