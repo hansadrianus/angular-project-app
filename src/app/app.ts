@@ -1,8 +1,9 @@
-import { Component, ElementRef, inject, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { DashboardModalComponent } from './components/dashboard-modal/dashboard-modal.component';
 import { GanttComponent } from './components/gantt/gantt.component';
 import { HolidaysModalComponent } from './components/holidays-modal/holidays-modal.component';
 import { TaskGridComponent } from './components/task-grid/task-grid.component';
+import { CaptureService } from './services/capture.service';
 import { ExcelService } from './services/excel.service';
 import { ProjectStoreService } from './services/project-store.service';
 
@@ -21,10 +22,12 @@ import { ProjectStoreService } from './services/project-store.service';
 export class App {
   readonly store = inject(ProjectStoreService);
   private excelService = inject(ExcelService);
+  private captureService = inject(CaptureService);
 
   readonly ganttRef = viewChild<GanttComponent>('ganttComp');
   readonly importFileInput = viewChild<ElementRef<HTMLInputElement>>('importFileInput');
 
+  readonly isGanttImageExporting = signal(false);
   isExporting = false;
 
   onAddTask(): void {
@@ -151,6 +154,32 @@ export class App {
       alert(`Export error: ${message}`);
     } finally {
       this.isExporting = false;
+    }
+  }
+
+  async onExportGanttImage(): Promise<void> {
+    if (this.isGanttImageExporting()) return;
+    this.isGanttImageExporting.set(true);
+
+    try {
+      const ganttElement = this.ganttRef()?.ganttCaptureElement()?.nativeElement;
+      if (!ganttElement) {
+        throw new Error('Gantt timeline is unavailable');
+      }
+
+      const dataUrl = await this.captureService.captureElement(ganttElement);
+      const projectName = this.store.scheduledTasks()[0]?.name.replace(/^◆\s*/, '') ?? '';
+      const projectSlug =
+        projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
+      const downloadLink = document.createElement('a');
+      downloadLink.href = dataUrl;
+      downloadLink.download = `${projectSlug}-gantt.png`;
+      downloadLink.click();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Image export error: ${message}`);
+    } finally {
+      this.isGanttImageExporting.set(false);
     }
   }
 }

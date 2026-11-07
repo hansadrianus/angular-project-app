@@ -2,7 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import type { Task } from './models/project.model';
 import { App } from './app';
 import { ProjectStoreService } from './services/project-store.service';
+import { CaptureService } from './services/capture.service';
 import { d2s } from './utils/date-utils';
+
+const onePixelPng =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0uUAAAAASUVORK5CYII=';
 
 const createTask = (
   uid: number,
@@ -38,6 +42,10 @@ const setProject = (store: ProjectStoreService, tasks: Task[]): void => {
 };
 
 describe('App', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
@@ -56,6 +64,128 @@ describe('App', () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('ProjectFlow');
+  });
+
+  it('downloads a PNG captured from the full Gantt wrapper with a project-based filename', async () => {
+    const fixture = TestBed.createComponent(App);
+    const captureService = TestBed.inject(CaptureService);
+    const capture = vi.spyOn(captureService, 'captureElement').mockResolvedValue(onePixelPng);
+    let downloadFilename = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadFilename = this.download;
+    });
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const ganttWrapper = compiled.querySelector('app-gantt .gantt-wrap') as HTMLElement;
+    const exportButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement | null;
+    expect(exportButton).toBeTruthy();
+    if (!exportButton) {
+      fixture.destroy();
+      return;
+    }
+
+    exportButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(capture).toHaveBeenCalledWith(ganttWrapper);
+    expect(downloadFilename).toBe('website-redesign-gantt.png');
+    expect(exportButton.disabled).toBe(false);
+    fixture.destroy();
+  });
+
+  it('alerts on image capture failure and restores the export button', async () => {
+    const fixture = TestBed.createComponent(App);
+    const capture = vi
+      .spyOn(TestBed.inject(CaptureService), 'captureElement')
+      .mockRejectedValue(new Error('capture failed'));
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const exportButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement | null;
+    expect(exportButton).toBeTruthy();
+    if (!exportButton) {
+      fixture.destroy();
+      return;
+    }
+
+    exportButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(alert).toHaveBeenCalledWith('Image export error: capture failed');
+    expect(exportButton.disabled).toBe(false);
+    fixture.destroy();
+  });
+
+  it('uses a generic filename when exporting an empty project', async () => {
+    const fixture = TestBed.createComponent(App);
+    setProject(TestBed.inject(ProjectStoreService), []);
+    vi.spyOn(TestBed.inject(CaptureService), 'captureElement').mockResolvedValue(onePixelPng);
+    let downloadFilename = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadFilename = this.download;
+    });
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const exportButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement | null;
+    expect(exportButton).toBeTruthy();
+    if (!exportButton) {
+      fixture.destroy();
+      return;
+    }
+
+    exportButton.click();
+    await fixture.whenStable();
+
+    expect(downloadFilename).toBe('project-gantt.png');
+    fixture.destroy();
+  });
+
+  it('disables the image export button while capture is pending', async () => {
+    const fixture = TestBed.createComponent(App);
+    let resolveCapture!: (dataUrl: string) => void;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.spyOn(TestBed.inject(CaptureService), 'captureElement').mockReturnValue(
+      new Promise((resolve) => {
+        resolveCapture = resolve;
+      })
+    );
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const exportButton = compiled.querySelector(
+      'button[aria-label="Export Gantt PNG"]'
+    ) as HTMLButtonElement | null;
+    expect(exportButton).toBeTruthy();
+    if (!exportButton) {
+      fixture.destroy();
+      return;
+    }
+
+    exportButton.click();
+    fixture.detectChanges();
+    expect(exportButton.disabled).toBe(true);
+
+    resolveCapture(onePixelPng);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(exportButton.disabled).toBe(false);
+    fixture.destroy();
   });
 
   it('should have initial demo tasks scheduled', () => {
