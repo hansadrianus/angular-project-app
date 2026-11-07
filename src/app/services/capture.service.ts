@@ -25,6 +25,11 @@ export class CaptureService {
         scale: 2,
         useCORS: true,
         logging: false,
+        foreignObjectRendering: true,
+        onclone: (clonedDocument) => {
+          clonedDocument.documentElement.style.backgroundColor = 'transparent';
+          clonedDocument.body.style.backgroundColor = 'transparent';
+        },
         backgroundColor: '#ffffff',
         width,
         height,
