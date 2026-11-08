@@ -6,6 +6,7 @@ export class CaptureService {
   async captureElement(element: HTMLElement): Promise<string> {
     const width = Math.max(element.scrollWidth, element.clientWidth);
     const height = Math.max(element.scrollHeight, element.clientHeight);
+    const bounds = element.getBoundingClientRect();
     const originalStyles = {
       overflow: element.style.overflow,
       width: element.style.width,
@@ -33,6 +34,8 @@ export class CaptureService {
         backgroundColor: '#ffffff',
         width,
         height,
+        x: -bounds.left - window.scrollX,
+        y: -bounds.top - window.scrollY,
         windowWidth: Math.max(document.documentElement.clientWidth, width),
         windowHeight: Math.max(document.documentElement.clientHeight, height),
       });

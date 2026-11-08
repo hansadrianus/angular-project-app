@@ -7,6 +7,7 @@ vi.mock('html2canvas', () => ({
 
 describe('CaptureService', () => {
   beforeEach(() => {
+    vi.mocked(html2canvas).mockClear();
     const canvas = document.createElement('canvas');
     vi.spyOn(canvas, 'toDataURL').mockReturnValue('data:image/png;base64,test');
     vi.mocked(html2canvas).mockResolvedValue(canvas);
@@ -38,5 +39,22 @@ describe('CaptureService', () => {
 
     expect(clonedDocument.documentElement.style.backgroundColor).toBe('transparent');
     expect(clonedDocument.body.style.backgroundColor).toBe('transparent');
+  });
+
+  it('offsets the capture to the selected element within the page', async () => {
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(200, 400, 800, 300),
+    );
+
+    await new CaptureService().captureElement(element);
+
+    expect(html2canvas).toHaveBeenCalledWith(
+      element,
+      expect.objectContaining({
+        x: -200 - window.scrollX,
+        y: -400 - window.scrollY,
+      }),
+    );
   });
 });
