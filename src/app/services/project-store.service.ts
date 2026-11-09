@@ -165,7 +165,7 @@ export class ProjectStoreService {
         level: lvl,
         preds: [],
         prog: 0,
-        startInput: null,
+        startInput: d2s(new Date()),
         actualStart: null,
         actualEnd: null,
         collapsed: false,

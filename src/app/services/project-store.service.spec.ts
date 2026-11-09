@@ -374,6 +374,22 @@ describe('ProjectStoreService', () => {
     expect(service.selectedUid()).toBeDefined();
   });
 
+  it('defaults a new task planned start to today without setting actual dates', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 9));
+
+    try {
+      service.addTask();
+
+      const newTask = service.state().tasks.find((task) => task.uid === service.selectedUid());
+      expect(newTask?.startInput).toBe('2026-11-09');
+      expect(newTask?.actualStart).toBeNull();
+      expect(newTask?.actualEnd).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('appends a task after undo leaves the added task selected', () => {
     const originalUids = service.state().tasks.map((task) => task.uid);
 
